@@ -1,0 +1,61 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Build inside an el9 userspace to match the RPM spec's target (dnf,
+    # kernel-devel, rpm-build). stream9 ships a 5.14 kernel-headers, but the BSP
+    # targets a 6.x kernel, so we install the kernel 6.12 package below (this
+    # also creates the /lib/modules/<ver>/build tree the Makefile and spec
+    # resolve against).
+    container:
+      image: quay.io/centos/centos:stream9
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install build tooling
+        run: dnf install -y dnf-plugins-core rpm-build findutils kmod
+
+      - name: Install build dependencies from the RPM spec
+        run: dnf builddep -y --spec rpmbuild/nexthop_bsp_kmods.spec
+
+      - name: Install the build kernel
+        # Install closest easy match to FBOSS kernel version
+        run: |
+          dnf install -y centos-release-kmods-kernel-6.12
+          dnf install -y kernel kernel-devel
+
+      - name: Build kernel modules
+        run: ./build.sh
+
+      - name: Verify the kmod was produced
+        run: |
+          test -f kmods/nh_bsp_stub.ko
+          modinfo kmods/nh_bsp_stub.ko
+
+      - name: Build the RPM
+        run: ./build_rpm.sh
+
+      - name: Verify the RPM was produced and packages the kmod
+        run: |
+          rpm=$(find rpmbuild/RPMS -name 'nexthop_bsp_kmods-*.rpm' | head -1)
+          if [ -z "$rpm" ]; then
+            echo "Error: no RPM was produced"
+            exit 1
+          fi
+          echo "Built RPM: $rpm"
+          rpm -qlp "$rpm"
+          rpm -qlp "$rpm" | grep -q 'extra/nh_bsp_stub.ko'
+
+      - name: Upload RPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexthop_bsp_kmods-rpm
+          path: rpmbuild/RPMS/**/*.rpm
+          if-no-files-found: error

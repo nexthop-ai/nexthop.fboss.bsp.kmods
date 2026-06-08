@@ -1,0 +1,21 @@
+# Kernel module build artifacts
+*.o
+*.ko
+*.mod
+*.mod.c
+*.o.d
+.*.cmd
+*.symvers
+*.order
+Module.symvers
+modules.order
+.tmp_versions/
+.build/
+
+# RPM build output
+rpmbuild/BUILD/
+rpmbuild/BUILDROOT/
+rpmbuild/RPMS/
+rpmbuild/SRPMS/
+rpmbuild/SPECS/
+dist/
