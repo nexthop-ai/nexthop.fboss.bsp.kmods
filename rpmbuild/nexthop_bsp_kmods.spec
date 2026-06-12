@@ -25,11 +25,11 @@ make
 %install
 # Create installation directories
 mkdir -p %{buildroot}/usr/local/nexthop_bsp/%{kver}
-mkdir -p %{buildroot}/lib/modules/%{kver}/extra
+mkdir -p %{buildroot}/lib/modules/%{kver}/extra/nexthop
 
 # Install kernel modules
 cd %{kmodsrc}
-install -m 644 *.ko %{buildroot}/lib/modules/%{kver}/extra/
+install -m 644 *.ko %{buildroot}/lib/modules/%{kver}/extra/nexthop/
 
 # Install configuration and scripts
 install -m 644 %{_sourcedir}/kmods/scripts/kmods.json %{buildroot}/usr/local/nexthop_bsp/%{kver}/
@@ -54,8 +54,8 @@ fi
 %files
 %defattr(-,root,root,-)
 /usr/local/nexthop_bsp/%{kver}/
-/lib/modules/%{kver}/extra/*.ko
+/lib/modules/%{kver}/extra/nexthop/*.ko
 
 %changelog
-* Thu Jun 04 2026 Nexthop <support@nexthop.ai> - 1.0.0-1
-- Initial skeleton package release
+* Mon Aug 25 2025 Arif Mohammad <marif@nexthop.ai> - 1.0.0-1
+- Initial package release
