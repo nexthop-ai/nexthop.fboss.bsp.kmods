@@ -7,11 +7,18 @@
 #include <linux/types.h>
 #include <linux/pci.h>
 
-/* PCI Vendor ID for NH FPGA platforms. Per-SKU device IDs and their
- * nh_fpga_pci_ids[] rows are added by each platform/<sku>.c integration. */
+/* PCI Vendor/Device IDs for NH FPGA platforms */
 #define NH_FPGA_VENDOR_XILINX 0x10ee
+#define NH_FPGA_DEVICE_CF2 0x7016
+#define NH_FPGA_DEVICE_M4062NHP_FPGA0 0x7018
+#define NH_FPGA_DEVICE_M4062NHP_FPGA1 0x7019
 
-static const struct pci_device_id nh_fpga_pci_ids[] = { { 0 } };
+static const struct pci_device_id nh_fpga_pci_ids[] = {
+	{ PCI_DEVICE(NH_FPGA_VENDOR_XILINX, NH_FPGA_DEVICE_CF2) },
+	{ PCI_DEVICE(NH_FPGA_VENDOR_XILINX, NH_FPGA_DEVICE_M4062NHP_FPGA0) },
+	{ PCI_DEVICE(NH_FPGA_VENDOR_XILINX, NH_FPGA_DEVICE_M4062NHP_FPGA1) },
+	{ 0 }
+};
 
 /* Pull in subsystem struct definitions. These headers contain only
  * type/enum/macro definitions — no static data. */

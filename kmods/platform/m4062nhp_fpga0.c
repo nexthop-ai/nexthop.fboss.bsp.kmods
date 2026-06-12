@@ -1,0 +1,162 @@
+// SPDX-License-Identifier: GPL-2.0
+// Copyright (c) 2026 Nexthop Systems Inc.
+
+#include <linux/bits.h>
+#include <linux/types.h>
+#include "nh_platform.h"
+
+/* ============================================================================
+ * LED — PSU / FAN / SYS status LEDs
+ *
+ * The "QSFP Management Card LED Control" register at offset 0x009C packs
+ * three 4-bit LED control fields:
+ *   bits [3:0]   PSU LED  ([0]=amber, [1]=blue, [2]=blink, [3]=rsvd)
+ *   bits [7:4]   FAN LED  (same field shape)
+ *   bits [11:8]  SYS LED  (same field shape)
+ * ============================================================================ */
+
+enum m4062nhp_fpga0_led_color {
+	M4062NHP_LED_COLOR_FAIL = 0,
+	M4062NHP_LED_COLOR_GOOD = 1,
+	M4062NHP_LED_NUM_COLORS
+};
+
+static const char
+	*const m4062nhp_fpga0_led_color_names[M4062NHP_LED_NUM_COLORS] = {
+		[M4062NHP_LED_COLOR_FAIL] = "amber",
+		[M4062NHP_LED_COLOR_GOOD] = "blue",
+	};
+
+static const struct nh_led_core_info
+m4062nhp_fpga0_led_info[NH_LED_TYPE_MAX][M4062NHP_LED_NUM_COLORS] = {
+	[NH_LED_TYPE_PSU] = {
+		[M4062NHP_LED_COLOR_FAIL] = {
+			.name = "psu_led",
+			.color_offset = 0,
+			.color_field_width = 1,
+			.blink_bit = 2,
+			.colors = {M4062NHP_LED_COLOR_FAIL},
+		},
+		[M4062NHP_LED_COLOR_GOOD] = {
+			.name = "psu_led",
+			.color_offset = 1,
+			.color_field_width = 1,
+			.blink_bit = 2,
+			.colors = {M4062NHP_LED_COLOR_GOOD},
+		},
+	},
+	[NH_LED_TYPE_FAN] = {
+		[M4062NHP_LED_COLOR_FAIL] = {
+			.name = "fan_led",
+			.color_offset = 4,
+			.color_field_width = 1,
+			.blink_bit = 6,
+			.colors = {M4062NHP_LED_COLOR_FAIL},
+		},
+		[M4062NHP_LED_COLOR_GOOD] = {
+			.name = "fan_led",
+			.color_offset = 5,
+			.color_field_width = 1,
+			.blink_bit = 6,
+			.colors = {M4062NHP_LED_COLOR_GOOD},
+		},
+	},
+	[NH_LED_TYPE_SYS] = {
+		[M4062NHP_LED_COLOR_FAIL] = {
+			.name = "sys_led",
+			.color_offset = 8,
+			.color_field_width = 1,
+			.blink_bit = 10,
+			.colors = {M4062NHP_LED_COLOR_FAIL},
+		},
+		[M4062NHP_LED_COLOR_GOOD] = {
+			.name = "sys_led",
+			.color_offset = 9,
+			.color_field_width = 1,
+			.blink_bit = 10,
+			.colors = {M4062NHP_LED_COLOR_GOOD},
+		},
+	},
+};
+
+static const struct nh_led_core_config m4062nhp_fpga0_led_config = {
+	.led_info = (const struct nh_led_core_info *)m4062nhp_fpga0_led_info,
+	.color_names = m4062nhp_fpga0_led_color_names,
+	.num_colors_per_led = 1,
+	.num_leds = 2,
+	.control_offset = 0x009c,
+};
+
+/* ============================================================================
+ * I2C mux
+ *
+ * FPGA0 has a single "I2C Mux Select" register at offset 0x0010 whose
+ * bits [1:0] select the channel for i2c master 0 (4 outgoing buses to
+ * PSU1..PSU4 EEPROM/MCU pairs). nh_fpga_mux writes the channel index
+ * into bits [1:0] of this register, matching the layout.
+ * ============================================================================ */
+
+static const struct mux_config m4062nhp_fpga0_mux[] = {
+	{ 0, 4, 0x0010, "PSU MUX control" },
+};
+
+/* ============================================================================
+ * Port LED
+ *
+ * FPGA0 drives the switch-card front-panel port LEDs for ports 33-96 in
+ * eight 32-bit control registers at 0x60..0x7C, packed 8 ports per
+ * register with a 4-bit field per port:
+ *   bit 0 = amber LED on, bit 1 = blue LED on, bits 3:2 = blink mode.
+ * The blink bits are not exposed by the current driver.
+ *
+ * Fans and OSFP transceiver control signals are owned by FPGA1; see
+ * m4062nhp_fpga1.c.
+ * ============================================================================ */
+
+/* { start_port, end_port, offset, bits_per_port, color_bit_offset } */
+static const struct port_led_range m4062nhp_fpga0_amber_ranges[] = {
+	{ 33, 40, 0x60, 4 }, { 41, 48, 0x64, 4 }, { 49, 56, 0x68, 4 },
+	{ 57, 64, 0x6C, 4 }, { 65, 72, 0x70, 4 }, { 73, 80, 0x74, 4 },
+	{ 81, 88, 0x78, 4 }, { 89, 96, 0x7C, 4 },
+};
+
+static const struct port_led_range m4062nhp_fpga0_blue_ranges[] = {
+	{ 33, 40, 0x60, 4, 1 }, { 41, 48, 0x64, 4, 1 }, { 49, 56, 0x68, 4, 1 },
+	{ 57, 64, 0x6C, 4, 1 }, { 65, 72, 0x70, 4, 1 }, { 73, 80, 0x74, 4, 1 },
+	{ 81, 88, 0x78, 4, 1 }, { 89, 96, 0x7C, 4, 1 },
+};
+
+static const struct port_led_color_addr m4062nhp_fpga0_port_led[PORT_LED_NUM_COLORS] = {
+	[PORT_LED_AMBER] = {
+		.num_ranges = ARRAY_SIZE(m4062nhp_fpga0_amber_ranges),
+		.ranges = m4062nhp_fpga0_amber_ranges,
+	},
+	[PORT_LED_BLUE] = {
+		.num_ranges = ARRAY_SIZE(m4062nhp_fpga0_blue_ranges),
+		.ranges = m4062nhp_fpga0_blue_ranges,
+	},
+};
+
+/* ============================================================================
+ * ASIC temperature — owned by FPGA0
+ * ============================================================================ */
+
+static const struct asic_temp_config m4062nhp_fpga0_asic_temp = {
+	.status_reg_offset = 0x0,
+	.max_mask = 0x1FFF0000,
+	.max_shift = 16,
+	.min_mask = 0x00001FFF,
+	.min_shift = 0,
+};
+
+const struct nh_platform_cfg nh_platform_m4062nhp_fpga0 = {
+	.device_id = NH_FPGA_DEVICE_M4062NHP_FPGA0,
+	.name = "M4062NHP_FPGA0",
+	.led_core_cfg = &m4062nhp_fpga0_led_config,
+	.port_led_cfg = m4062nhp_fpga0_port_led,
+	.num_ports_per_led = 128,
+	.mux_cfg = m4062nhp_fpga0_mux,
+	.mux_count = ARRAY_SIZE(m4062nhp_fpga0_mux),
+	.asic_temp_cfg = &m4062nhp_fpga0_asic_temp,
+	/* fan_cfg, xcvr_cfg: NULL/0. */
+};
