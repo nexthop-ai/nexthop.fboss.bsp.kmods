@@ -34,15 +34,27 @@ jobs:
       - name: Build kernel modules
         run: ./build.sh
 
-      - name: Verify the kmod was produced
+      - name: Verify the kmods were produced
+        # kmods.json is the single source of truth for the module list (it is
+        # installed by the RPM and consumed by fbsp tooling). Every listed
+        # module must build, and every built module must be listed.
         run: |
-          test -f kmods/nh_bsp_stub.ko
-          modinfo kmods/nh_bsp_stub.ko
+          mods=$(jq -r '.bspKmods[], .sharedKmods[]' kmods/scripts/kmods.json)
+          for m in $mods; do
+            test -f "kmods/$m.ko"
+            modinfo "kmods/$m.ko"
+          done
+          built=$(ls kmods/*.ko | wc -l)
+          listed=$(echo "$mods" | wc -w)
+          if [ "$built" -ne "$listed" ]; then
+            echo "kmods.json lists $listed modules but $built .ko files were built"
+            exit 1
+          fi
 
       - name: Build the RPM
         run: ./build_rpm.sh
 
-      - name: Verify the RPM was produced and packages the kmod
+      - name: Verify the RPM was produced and packages the kmods
         run: |
           rpm=$(find rpmbuild/RPMS -name 'nexthop_bsp_kmods-*.rpm' | head -1)
           if [ -z "$rpm" ]; then
@@ -51,7 +63,9 @@ jobs:
           fi
           echo "Built RPM: $rpm"
           rpm -qlp "$rpm"
-          rpm -qlp "$rpm" | grep -q 'extra/nh_bsp_stub.ko'
+          for m in $(jq -r '.bspKmods[], .sharedKmods[]' kmods/scripts/kmods.json); do
+            rpm -qlp "$rpm" | grep -q "extra/nexthop/$m.ko"
+          done
 
       - name: Upload RPM artifact
         uses: actions/upload-artifact@v7

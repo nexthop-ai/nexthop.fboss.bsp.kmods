@@ -1,6 +1,14 @@
 {
     "bspKmods": [
-      "nh_bsp_stub"
+      "nh_fpga_i2c",
+      "fbiob_pci",
+      "nh_fpga_mux",
+      "nh_fpga_info",
+      "nh_fpga_asic_temp",
+      "nh_fpga_fan",
+      "nh_fpga_led",
+      "nh_fpga_port_led",
+      "nh_xcvr_ctrl"
     ],
     "sharedKmods": []
 }
