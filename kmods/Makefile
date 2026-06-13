@@ -9,7 +9,10 @@ ifneq ($(KERNELRELEASE),)
 
     # Shared platform objects linked into each module that uses per-platform data.
     # Per-SKU objects (platform/<sku>.o) are appended by each platform integration.
-    nh_platform_objs := platform/nh_platform.o
+    nh_platform_objs := platform/nh_platform.o \
+                        platform/cf2.o \
+                        platform/m4062nhp_fpga0.o \
+                        platform/m4062nhp_fpga1.o
 
     # Object files for fbiob_pci.ko
     fbiob_pci-objs := nh_fpga_fbiob_main.o nh_fpga_aux.o
