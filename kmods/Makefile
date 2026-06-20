@@ -43,9 +43,9 @@ else
     PWD := $(shell pwd)
 
     # Default to the FBOSS uapi headers bundled in this repository.
-    # Override FBOSS_SRC to build against a full FBOSS source tree.
-    FBOSS_SRC ?= $(PWD)/../fboss_headers
-    KERNEL_CFLAGS = ccflags-y="-I$(FBOSS_SRC)"
+    # Override FBOSS_HEADERS to build against headers from a different location.
+    FBOSS_HEADERS ?= $(PWD)/../fboss_headers
+    KERNEL_CFLAGS = ccflags-y="-I$(FBOSS_HEADERS)"
 
 default:
 	$(MAKE) -j $(shell nproc) -C $(KERNELDIR) M=$(PWD) $(KERNEL_CFLAGS) modules
