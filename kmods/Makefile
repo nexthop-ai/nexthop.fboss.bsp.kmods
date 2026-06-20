@@ -43,7 +43,7 @@ else
     PWD := $(shell pwd)
 
     # Default to the FBOSS uapi headers bundled in this repository.
-    # Override FBOSS_HEADERS to build against a full FBOSS source tree.
+    # Override FBOSS_HEADERS to build against headers from a different location.
     FBOSS_HEADERS ?= $(PWD)/../fboss_headers
     KERNEL_CFLAGS = ccflags-y="-I$(FBOSS_HEADERS)"
 
