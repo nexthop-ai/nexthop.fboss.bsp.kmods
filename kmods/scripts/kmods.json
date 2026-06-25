@@ -8,7 +8,8 @@
       "nh_fpga_fan",
       "nh_fpga_led",
       "nh_fpga_port_led",
-      "nh_xcvr_ctrl"
+      "nh_xcvr_ctrl",
+      "nh_fpga_psu"
     ],
     "sharedKmods": []
 }

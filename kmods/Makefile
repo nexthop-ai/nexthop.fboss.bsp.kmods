@@ -5,7 +5,7 @@
 
 ifneq ($(KERNELRELEASE),)
     # This executes when kernel's build system calls this Makefile
-    obj-m := fbiob_pci.o nh_fpga_i2c.o nh_fpga_mux.o nh_fpga_info.o nh_fpga_asic_temp.o nh_fpga_fan.o nh_xcvr_ctrl.o nh_fpga_led.o nh_fpga_port_led.o
+    obj-m := fbiob_pci.o nh_fpga_i2c.o nh_fpga_mux.o nh_fpga_info.o nh_fpga_asic_temp.o nh_fpga_fan.o nh_xcvr_ctrl.o nh_fpga_led.o nh_fpga_port_led.o nh_fpga_psu.o
 
     # Shared platform objects linked into each module that uses per-platform data.
     # Per-SKU objects (platform/<sku>.o) are appended by each platform integration.
@@ -25,6 +25,9 @@ ifneq ($(KERNELRELEASE),)
 
     # Object files for nh_fpga_asic_temp.ko
     nh_fpga_asic_temp-objs := nh_fpga_asic_temp_main.o $(nh_platform_objs)
+
+    # Object files for nh_fpga_psu.ko (PSU presence)
+    nh_fpga_psu-objs := nh_fpga_psu_main.o $(nh_platform_objs)
 
     # Object files for nh_fpga_fan.ko
     nh_fpga_fan-objs := nh_fpga_fan_main.o $(nh_platform_objs)
