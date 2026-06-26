@@ -149,6 +149,28 @@ static const struct asic_temp_config m4062nhp_fpga0_asic_temp = {
 	.min_shift = 0,
 };
 
+/* ============================================================================
+ * PSU presence — FPGA0
+ *
+ * Register 0x002c contains one active-low presence bit per PSU
+ * (0 = present). present_reg_offset is relative to the psu_present
+ * aux device's CSR base from fpgaIpBlockConfig.csrOffset in
+ * platform_manager.json.
+ * ============================================================================ */
+static const u32 m4062nhp_fpga0_psu_masks[] = {
+	BIT(9), /* PSU1 */
+	BIT(13), /* PSU2 */
+	BIT(1), /* PSU3 */
+	BIT(5), /* PSU4 */
+};
+
+static const struct psu_present_cfg m4062nhp_fpga0_psu = {
+	.present_reg_offset = 0x00,
+	.num_psus = ARRAY_SIZE(m4062nhp_fpga0_psu_masks),
+	.active_low = true,
+	.present_masks = m4062nhp_fpga0_psu_masks,
+};
+
 const struct nh_platform_cfg nh_platform_m4062nhp_fpga0 = {
 	.device_id = NH_FPGA_DEVICE_M4062NHP_FPGA0,
 	.name = "M4062NHP_FPGA0",
@@ -158,5 +180,6 @@ const struct nh_platform_cfg nh_platform_m4062nhp_fpga0 = {
 	.mux_cfg = m4062nhp_fpga0_mux,
 	.mux_count = ARRAY_SIZE(m4062nhp_fpga0_mux),
 	.asic_temp_cfg = &m4062nhp_fpga0_asic_temp,
+	.psu_present_cfg = &m4062nhp_fpga0_psu,
 	/* fan_cfg, xcvr_cfg: NULL/0. */
 };
