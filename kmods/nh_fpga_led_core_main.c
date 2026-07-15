@@ -248,6 +248,8 @@ static int nh_led_probe(struct auxiliary_device *aux_dev,
 		ctrl->led_type = NH_LED_TYPE_FAN;
 	else if (strcmp(led_name, "sys_led") == 0)
 		ctrl->led_type = NH_LED_TYPE_SYS;
+	else if (strcmp(led_name, "mgmt_qsfp_led") == 0)
+		ctrl->led_type = NH_LED_TYPE_MGMT_QSFP;
 	else {
 		dev_err(&aux_dev->dev, "Unknown LED type: %s\n", led_name);
 		return -EINVAL;
@@ -284,6 +286,7 @@ static const struct auxiliary_device_id nh_led_aux_id_table[] = {
 	{ .name = "fbiob_pci.psu_led" },
 	{ .name = "fbiob_pci.fan_led" },
 	{ .name = "fbiob_pci.sys_led" },
+	{ .name = "fbiob_pci.mgmt_qsfp_led" },
 	{},
 };
 MODULE_DEVICE_TABLE(auxiliary, nh_led_aux_id_table);

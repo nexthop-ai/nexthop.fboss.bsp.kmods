@@ -9,10 +9,11 @@
  * LED — PSU / FAN / SYS status LEDs
  *
  * The "QSFP Management Card LED Control" register at offset 0x009C packs
- * three 4-bit LED control fields:
+ * four 4-bit LED control fields:
  *   bits [3:0]   PSU LED  ([0]=amber, [1]=blue, [2]=blink, [3]=rsvd)
  *   bits [7:4]   FAN LED  (same field shape)
  *   bits [11:8]  SYS LED  (same field shape)
+ *   bits [19:16] MGMT QSFP LED (same field shape)
  * ============================================================================ */
 
 enum m4062nhp_fpga0_led_color {
@@ -74,6 +75,22 @@ m4062nhp_fpga0_led_info[NH_LED_TYPE_MAX][M4062NHP_LED_NUM_COLORS] = {
 			.color_offset = 9,
 			.color_field_width = 1,
 			.blink_bit = 10,
+			.colors = {M4062NHP_LED_COLOR_GOOD},
+		},
+	},
+	[NH_LED_TYPE_MGMT_QSFP] = {
+		[M4062NHP_LED_COLOR_FAIL] = {
+			.name = "mgmt_qsfp_led",
+			.color_offset = 16,
+			.color_field_width = 1,
+			.blink_bit = 18,
+			.colors = {M4062NHP_LED_COLOR_FAIL},
+		},
+		[M4062NHP_LED_COLOR_GOOD] = {
+			.name = "mgmt_qsfp_led",
+			.color_offset = 17,
+			.color_field_width = 1,
+			.blink_bit = 18,
 			.colors = {M4062NHP_LED_COLOR_GOOD},
 		},
 	},
