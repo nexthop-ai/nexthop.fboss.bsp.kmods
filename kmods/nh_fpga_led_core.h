@@ -13,6 +13,7 @@ enum nh_led_type {
 	NH_LED_TYPE_PSU = 0,
 	NH_LED_TYPE_FAN = 1,
 	NH_LED_TYPE_SYS = 2,
+	NH_LED_TYPE_MGMT_QSFP = 3,
 	NH_LED_TYPE_MAX
 };
 
