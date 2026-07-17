@@ -37,7 +37,7 @@ xcvr_ctrl_find_port_group(const struct xcvr_ctrl_config *cfg, u32 port_num)
 }
 
 /* Read transceiver control register */
-static int nh_xcvr_ctrl_read_reg(struct nh_xcvr_ctrl *ctrl, u32 offset)
+static int nh_xcvr_ctrl_read_reg(struct nh_xcvr_ctrl *ctrl, u32 offset, u32 bit)
 {
 	u32 reg_value;
 	u32 bit_mask;
@@ -45,15 +45,15 @@ static int nh_xcvr_ctrl_read_reg(struct nh_xcvr_ctrl *ctrl, u32 offset)
 	/* Read register */
 	reg_value = ioread32(ctrl->base + offset);
 
-	/* Extract bit for this port */
-	bit_mask = 1U << ctrl->bit_pos;
+	/* Extract bit for this port/signal */
+	bit_mask = 1U << bit;
 
 	return (reg_value & bit_mask) ? 1 : 0;
 }
 
 /* Write transceiver control register */
 static void nh_xcvr_ctrl_write_reg(struct nh_xcvr_ctrl *ctrl, u32 offset,
-				   int value)
+				   u32 bit, int value)
 {
 	u32 reg_value;
 	u32 bit_mask;
@@ -63,8 +63,8 @@ static void nh_xcvr_ctrl_write_reg(struct nh_xcvr_ctrl *ctrl, u32 offset,
 	/* Read current register value */
 	reg_value = ioread32(ctrl->base + offset);
 
-	/* Modify bit for this port */
-	bit_mask = 1U << ctrl->bit_pos;
+	/* Modify bit for this port/signal */
+	bit_mask = 1U << bit;
 
 	if (value)
 		reg_value |= bit_mask;
@@ -85,7 +85,8 @@ static ssize_t xcvr_reset_show(struct device *dev,
 
 	return sysfs_emit(buf, "%u\n",
 			  nh_xcvr_ctrl_read_reg(ctrl,
-						ctrl->group->reset_reg_offset));
+						ctrl->group->reset_reg_offset,
+						ctrl->reset_bit));
 }
 
 static ssize_t xcvr_reset_store(struct device *dev,
@@ -99,7 +100,8 @@ static ssize_t xcvr_reset_store(struct device *dev,
 	if (ret)
 		return ret;
 
-	nh_xcvr_ctrl_write_reg(ctrl, ctrl->group->reset_reg_offset, value);
+	nh_xcvr_ctrl_write_reg(ctrl, ctrl->group->reset_reg_offset,
+			       ctrl->reset_bit, value);
 	return count;
 }
 
@@ -109,9 +111,10 @@ static ssize_t xcvr_low_power_show(struct device *dev,
 {
 	struct nh_xcvr_ctrl *ctrl = dev_get_drvdata(dev);
 
-	return sysfs_emit(
-		buf, "%u\n",
-		nh_xcvr_ctrl_read_reg(ctrl, ctrl->group->lp_mode_reg_offset));
+	return sysfs_emit(buf, "%u\n",
+			  nh_xcvr_ctrl_read_reg(ctrl,
+						ctrl->group->lp_mode_reg_offset,
+						ctrl->lp_mode_bit));
 }
 
 static ssize_t xcvr_low_power_store(struct device *dev,
@@ -125,7 +128,8 @@ static ssize_t xcvr_low_power_store(struct device *dev,
 	if (ret)
 		return ret;
 
-	nh_xcvr_ctrl_write_reg(ctrl, ctrl->group->lp_mode_reg_offset, value);
+	nh_xcvr_ctrl_write_reg(ctrl, ctrl->group->lp_mode_reg_offset,
+			       ctrl->lp_mode_bit, value);
 	return count;
 }
 
@@ -137,9 +141,10 @@ static ssize_t xcvr_present_show(struct device *dev,
 
 	/* We could reverse the presence bit with !nh_xcvr_ctrl_read_reg
 	so we do not need to modify presentHoldHi but it would not match the raw hardware value */
-	return sysfs_emit(
-		buf, "%u\n",
-		nh_xcvr_ctrl_read_reg(ctrl, ctrl->group->present_reg_offset));
+	return sysfs_emit(buf, "%u\n",
+			  nh_xcvr_ctrl_read_reg(ctrl,
+						ctrl->group->present_reg_offset,
+						ctrl->present_bit));
 }
 
 /* Create sysfs attributes for transceiver control */
@@ -263,10 +268,21 @@ static int nh_xcvr_ctrl_probe(struct auxiliary_device *aux_dev,
 			ctrl->port_num, device_id);
 		return -ENODEV;
 	}
-	/* Each group covers at most 32 ports; the port's bit position
-	 * within its 32-bit register is its 0-based offset within the group.
-	 */
-	ctrl->bit_pos = ctrl->port_num - ctrl->group->start_port;
+	/* Each OSFP group covers at most 32 ports; the port's bit position
+	 * within its 32-bit register is its 0-based offset within the group,
+	 * shared across reset/lp/present. A fixed_bits group (e.g. the mgmt
+	 * QSFP) instead pins each signal to its own bit. */
+	if (ctrl->group->fixed_bits) {
+		ctrl->reset_bit = ctrl->group->reset_bit;
+		ctrl->lp_mode_bit = ctrl->group->lp_mode_bit;
+		ctrl->present_bit = ctrl->group->present_bit;
+	} else {
+		u32 bit_pos = ctrl->port_num - ctrl->group->start_port;
+
+		ctrl->reset_bit = bit_pos;
+		ctrl->lp_mode_bit = bit_pos;
+		ctrl->present_bit = bit_pos;
+	}
 
 	/* Create sysfs attributes */
 	ret = nh_xcvr_ctrl_create_attrs(&aux_dev->dev, ctrl->port_num);
