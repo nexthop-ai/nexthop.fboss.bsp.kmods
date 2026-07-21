@@ -14,6 +14,11 @@ struct nh_platform_cfg; /* forward declaration — full definition in platform/n
  * (port_num - start_port). A platform with multiple register windows
  * (per port card / mezzanine / FPGA-internal half) declares one entry
  * per window, so end_port - start_port is at most 31.
+ *
+ * A dedicated single-port block (e.g. the management QSFP) whose three
+ * signals do not share one bit index across the register triple sets
+ * fixed_bits and the per-signal *_bit fields instead; the port-offset
+ * rule above is then bypassed.
  */
 struct xcvr_port_group {
 	u32 start_port; /* inclusive, 1-based */
@@ -21,6 +26,10 @@ struct xcvr_port_group {
 	u32 reset_reg_offset;
 	u32 lp_mode_reg_offset;
 	u32 present_reg_offset;
+	bool fixed_bits; /* use reset_bit/lp_mode_bit/present_bit verbatim */
+	u32 reset_bit;
+	u32 lp_mode_bit;
+	u32 present_bit;
 };
 
 /* Per-device xcvr control structure */
@@ -28,7 +37,12 @@ struct nh_xcvr_ctrl {
 	struct auxiliary_device *aux_dev;
 	void __iomem *base;
 	u32 port_num;
-	u32 bit_pos; /* bit within the register, = port_num - group->start_port */
+	/* Bit index within each signal's register. For OSFP groups all three
+	 * equal (port_num - group->start_port); for a fixed_bits group they
+	 * take the group's per-signal values. */
+	u32 reset_bit;
+	u32 lp_mode_bit;
+	u32 present_bit;
 	const struct xcvr_port_group *group; /* cached group for this port */
 	const struct nh_platform_cfg
 		*platform_cfg; /* Per-device platform descriptor */

@@ -188,6 +188,37 @@ static const struct psu_present_cfg m4062nhp_fpga0_psu = {
 	.present_masks = m4062nhp_fpga0_psu_masks,
 };
 
+/* ============================================================================
+ * Transceiver control — management QSFP (port 129)
+ *
+ * The mgmt QSFP is a dedicated block on FPGA0, not part of the FPGA1
+ * front-panel windows. Its three signals live at fixed bits rather than a
+ * shared per-port offset:
+ *   QSFP Management Card Control @ 0x0088: bit1 reset_l, bit2 lpmode
+ *   QSFP Management Card Status  @ 0x008C: bit4 prsnt_l
+ * (reset_l / prsnt_l are active-low; polarity is handled in the BSP
+ * platform mapping, not here.)
+ * ============================================================================ */
+
+static const struct xcvr_port_group m4062nhp_fpga0_xcvr_groups[] = {
+	{
+		.start_port = 129,
+		.end_port = 129,
+		.reset_reg_offset = 0x0088,
+		.lp_mode_reg_offset = 0x0088,
+		.present_reg_offset = 0x008C,
+		.fixed_bits = true,
+		.reset_bit = 1,
+		.lp_mode_bit = 2,
+		.present_bit = 4,
+	},
+};
+
+static const struct xcvr_ctrl_config m4062nhp_fpga0_xcvr = {
+	.groups = m4062nhp_fpga0_xcvr_groups,
+	.num_groups = ARRAY_SIZE(m4062nhp_fpga0_xcvr_groups),
+};
+
 const struct nh_platform_cfg nh_platform_m4062nhp_fpga0 = {
 	.device_id = NH_FPGA_DEVICE_M4062NHP_FPGA0,
 	.name = "M4062NHP_FPGA0",
@@ -198,5 +229,6 @@ const struct nh_platform_cfg nh_platform_m4062nhp_fpga0 = {
 	.mux_count = ARRAY_SIZE(m4062nhp_fpga0_mux),
 	.asic_temp_cfg = &m4062nhp_fpga0_asic_temp,
 	.psu_present_cfg = &m4062nhp_fpga0_psu,
-	/* fan_cfg, xcvr_cfg: NULL/0. */
+	.xcvr_cfg = &m4062nhp_fpga0_xcvr,
+	/* fan_cfg: NULL/0. */
 };
