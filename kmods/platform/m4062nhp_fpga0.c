@@ -80,14 +80,14 @@ m4062nhp_fpga0_led_info[NH_LED_TYPE_MAX][M4062NHP_LED_NUM_COLORS] = {
 	},
 	[NH_LED_TYPE_MGMT_QSFP] = {
 		[M4062NHP_LED_COLOR_FAIL] = {
-			.name = "mgmt_qsfp_led",
+			.name = "port129_led2",
 			.color_offset = 16,
 			.color_field_width = 1,
 			.blink_bit = 18,
 			.colors = {M4062NHP_LED_COLOR_FAIL},
 		},
 		[M4062NHP_LED_COLOR_GOOD] = {
-			.name = "mgmt_qsfp_led",
+			.name = "port129_led1",
 			.color_offset = 17,
 			.color_field_width = 1,
 			.blink_bit = 18,
