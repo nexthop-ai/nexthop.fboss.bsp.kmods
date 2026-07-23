@@ -31,6 +31,7 @@ struct nh_led_core_dev {
 	struct led_classdev cdev; /* LED class device */
 	int color; /* LED color index */
 	struct nh_led_core_controller *ctrl; /* Parent controller */
+	bool trigger_inited; /* led_trigger_init succeeded for this LED */
 };
 
 struct nh_platform_cfg; /* forward declaration — full definition in platform/nh_platform.h */
