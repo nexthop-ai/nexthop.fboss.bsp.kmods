@@ -33,7 +33,7 @@ ifneq ($(KERNELRELEASE),)
     nh_fpga_fan-objs := nh_fpga_fan_main.o $(nh_platform_objs)
 
     # Object files for nh_fpga_led.ko (core LED driver for all LED types)
-    nh_fpga_led-objs := nh_fpga_led_core_main.o $(nh_platform_objs)
+    nh_fpga_led-objs := nh_fpga_led_core_main.o nh_fpga_led_trigger.o $(nh_platform_objs)
 
     # Object files for nh_xcvr_ctrl.ko
     nh_xcvr_ctrl-objs := nh_xcvr_ctrl_main.o $(nh_platform_objs)

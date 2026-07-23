@@ -12,6 +12,7 @@
 
 #include "nh_fpga_fbiob.h"
 #include "nh_fpga_led_core.h"
+#include "nh_fpga_led_trigger.h"
 #include "platform/nh_platform.h"
 
 #define DRIVER_NAME "nh_fpga_led"
@@ -182,6 +183,15 @@ static int nh_led_register_leds(struct nh_led_core_controller *ctrl)
 				return ret;
 			}
 
+			ret = led_trigger_init(led_dev->cdev.dev);
+			if (ret) {
+				dev_warn(
+					&ctrl->aux_dev->dev,
+					"Failed to initialize LED trigger for %s: %d\n",
+					led_name, ret);
+			}
+			led_dev->trigger_inited = !ret;
+
 			dev_dbg(&ctrl->aux_dev->dev, "Registered LED: %s\n",
 				led_name);
 		}
@@ -279,6 +289,18 @@ static int nh_led_probe(struct auxiliary_device *aux_dev,
 
 static void nh_led_remove(struct auxiliary_device *aux_dev)
 {
+	struct nh_led_core_controller *ctrl = dev_get_drvdata(&aux_dev->dev);
+	int i;
+
+	if (ctrl && ctrl->leds) {
+		int total_leds =
+			ctrl->platform_cfg->led_core_cfg->num_leds *
+			ctrl->platform_cfg->led_core_cfg->num_colors_per_led;
+		for (i = 0; i < total_leds; i++) {
+			if (ctrl->leds[i].trigger_inited)
+				led_trigger_deinit(ctrl->leds[i].cdev.dev);
+		}
+	}
 	dev_info(&aux_dev->dev, "LED Controller removed\n");
 }
 
