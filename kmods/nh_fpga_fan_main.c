@@ -122,31 +122,23 @@ static int nh_fpga_fan_read_tach(struct nh_fpga_fan_controller *controller,
 	}
 }
 
-/* Convert tachometer cycles to RPM using updated HW specification
- * New formula from HW: RPM = 60,000,000 / (3.92 * <TACH integer>)
- * Note: The driver divides the tach reading from FPGA by 8
- * All fans now use 3.92μs/count time unit
+/* Convert tachometer cycles to RPM using the HW specification
+ * HW formula: RPM = 60,000,000 / (3.92 * <TACH integer>)
+ * where <TACH integer> is the raw tach reading from the FPGA and each count
+ * represents FAN_TACH_TIME_UNIT_NS (3.92us).
  */
 u32 nh_fpga_fan_tach_to_rpm(u32 tach_cycles)
 {
 	u64 rpm;
-	u32 adjusted_tach;
 
 	if (tach_cycles == 0 || tach_cycles == 0xFFFF)
 		return 0; /* Fan stopped */
 
-	/* divides tach reading by 8 */
-	adjusted_tach = tach_cycles / 8;
-
-	if (adjusted_tach == 0)
-		return 0; /* Avoid division by zero */
-
-	/* New HW formula: RPM = 60,000,000 / (3.92 * adjusted_tach)
-	 * Using integer arithmetic: RPM = 60000000000 / (3920 * adjusted_tach)
-	 * This matches SONIC's calculation method
+	/* HW formula: RPM = 60,000,000 / (3.92us * tach_cycles)
+	 * Using integer arithmetic in ns: RPM = 60000000000 / (3920 * tach_cycles)
 	 */
 	rpm = div64_u64(60000000000ULL,
-			(u64)adjusted_tach * FAN_TACH_TIME_UNIT_NS);
+			(u64)tach_cycles * FAN_TACH_TIME_UNIT_NS);
 
 	return (u32)rpm;
 }
