@@ -134,8 +134,8 @@ u32 nh_fpga_fan_tach_to_rpm(u32 tach_cycles)
 	if (tach_cycles == 0 || tach_cycles == 0xFFFF)
 		return 0; /* Fan stopped */
 
-	/* HW formula: RPM = 60,000,000 / (3.92 * tach_cycles)
-	 * Using integer arithmetic: RPM = 60000000000 / (3920 * tach_cycles)
+	/* HW formula: RPM = 60,000,000 / (3.92us * tach_cycles)
+	 * Using integer arithmetic in ns: RPM = 60000000000 / (3920 * tach_cycles)
 	 */
 	rpm = div64_u64(60000000000ULL,
 			(u64)tach_cycles * FAN_TACH_TIME_UNIT_NS);
