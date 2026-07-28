@@ -12,9 +12,9 @@
 
 /* FPGA version register offsets */
 #define FPGA_VERSION_REG_OFFSET 0x0000
-#define FPGA_VERSION_MAJOR_MASK 0xFFFF0000
-#define FPGA_VERSION_MAJOR_SHIFT 16
-#define FPGA_VERSION_MINOR_MASK 0x0000FFFF
+#define FPGA_VERSION_MAJOR_MASK 0x00000F00
+#define FPGA_VERSION_MAJOR_SHIFT 8
+#define FPGA_VERSION_MINOR_MASK 0x000000FF
 #define FPGA_VERSION_MINOR_SHIFT 0
 
 /* FPGA info device structure */
@@ -24,6 +24,15 @@ struct nh_fpga_info {
 	u32 fpga_ver;
 	u32 fpga_sub_ver;
 };
+
+/* Sysfs attribute: fw_ver — "major.minor" per the BSP API spec */
+static ssize_t fw_ver_show(struct device *dev, struct device_attribute *attr,
+			   char *buf)
+{
+	struct nh_fpga_info *info = dev_get_drvdata(dev);
+	return sysfs_emit(buf, "%u.%u\n", info->fpga_ver, info->fpga_sub_ver);
+}
+static DEVICE_ATTR_RO(fw_ver);
 
 /* Sysfs attribute: fpga_ver */
 static ssize_t fpga_ver_show(struct device *dev, struct device_attribute *attr,
@@ -45,6 +54,7 @@ static DEVICE_ATTR_RO(fpga_sub_ver);
 
 /* Sysfs attributes array */
 static struct attribute *fpga_info_attrs[] = {
+	&dev_attr_fw_ver.attr,
 	&dev_attr_fpga_ver.attr,
 	&dev_attr_fpga_sub_ver.attr,
 	NULL,
