@@ -131,63 +131,21 @@ static const struct port_led_color_addr m4062nhp_fpga1_port_led[PORT_LED_NUM_COL
  * The status register has no per-fan tach-OK bits (only PG / module-id /
  * card-type), so .inner_tach / .outer_tach are left 0.
  *
- * LED bit layout in 0x00A0 (active-low, default red-on):
+ * LED bit layout in 0x00A0 (active-low, default fail-on), per chain-local fan:
  *   chain 0: fan1 red=0/grn=1, fan2 red=2/grn=3, fan3 red=4/grn=5, fan4 red=6/grn=7
  *   chain 1: fan1 red=16/grn=17, fan2 red=18/grn=19, fan3 red=20/grn=21, fan4 red=22/grn=23
+ * Software fan1-4 map to chain 1 (top row), fan5-8 to chain 0 (bottom row).
  * ============================================================================ */
 
 static const struct fan m4062nhp_fpga1_fans[] = {
-	/* ---- Fan Card 0 (chain 0): status 0x00A4, flags 0x01D0 ---- */
+	/*
+	 * Software fan1-8 are numbered top row then bottom row to match the
+	 * physical chassis. The top row is wired to chain 1 and the
+	 * bottom row to chain 0, so fan1-4 use the chain-1 register set and
+	 * fan5-8 use chain 0.
+	 */
+	/* ---- fan1-4 = top row (chain 1): status 0x00A8, flags 0x01D4 ---- */
 	[0] = {
-		.status_offset = 0x00A4,
-		.status_change_flags_offset = 0x01D0,
-		.pwrgood = BIT(8),
-		.module_id_mask = GENMASK(7, 4),
-		.module_id_shift = 0x4,
-		.ctrl_fail_led_bit = BIT(0),
-		.ctrl_good_led_bit = BIT(1),
-		.pwm_offset = 0x0240,
-		.inner_tach_offset = 0x00B4,
-		.outer_tach_offset = 0x00B4,
-	},
-	[1] = {
-		.status_offset = 0x00A4,
-		.status_change_flags_offset = 0x01D0,
-		.pwrgood = BIT(15),
-		.module_id_mask = GENMASK(14, 11),
-		.module_id_shift = 0xb,
-		.ctrl_fail_led_bit = BIT(2),
-		.ctrl_good_led_bit = BIT(3),
-		.pwm_offset = 0x0244,
-		.inner_tach_offset = 0x00B8,
-		.outer_tach_offset = 0x00B8,
-	},
-	[2] = {
-		.status_offset = 0x00A4,
-		.status_change_flags_offset = 0x01D0,
-		.pwrgood = BIT(22),
-		.module_id_mask = GENMASK(21, 18),
-		.module_id_shift = 0x12,
-		.ctrl_fail_led_bit = BIT(4),
-		.ctrl_good_led_bit = BIT(5),
-		.pwm_offset = 0x0248,
-		.inner_tach_offset = 0x00BC,
-		.outer_tach_offset = 0x00BC,
-	},
-	[3] = {
-		.status_offset = 0x00A4,
-		.status_change_flags_offset = 0x01D0,
-		.pwrgood = BIT(29),
-		.module_id_mask = GENMASK(28, 25),
-		.module_id_shift = 0x19,
-		.ctrl_fail_led_bit = BIT(6),
-		.ctrl_good_led_bit = BIT(7),
-		.pwm_offset = 0x024C,
-		.inner_tach_offset = 0x00C0,
-		.outer_tach_offset = 0x00C0,
-	},
-	/* ---- Fan Card 1 (chain 1): status 0x00A8, flags 0x01D4 ---- */
-	[4] = {
 		.status_offset = 0x00A8,
 		.status_change_flags_offset = 0x01D4,
 		.pwrgood = BIT(8),
@@ -199,7 +157,7 @@ static const struct fan m4062nhp_fpga1_fans[] = {
 		.inner_tach_offset = 0x00C8,
 		.outer_tach_offset = 0x00C8,
 	},
-	[5] = {
+	[1] = {
 		.status_offset = 0x00A8,
 		.status_change_flags_offset = 0x01D4,
 		.pwrgood = BIT(15),
@@ -211,7 +169,7 @@ static const struct fan m4062nhp_fpga1_fans[] = {
 		.inner_tach_offset = 0x00CC,
 		.outer_tach_offset = 0x00CC,
 	},
-	[6] = {
+	[2] = {
 		.status_offset = 0x00A8,
 		.status_change_flags_offset = 0x01D4,
 		.pwrgood = BIT(22),
@@ -223,7 +181,7 @@ static const struct fan m4062nhp_fpga1_fans[] = {
 		.inner_tach_offset = 0x00D0,
 		.outer_tach_offset = 0x00D0,
 	},
-	[7] = {
+	[3] = {
 		.status_offset = 0x00A8,
 		.status_change_flags_offset = 0x01D4,
 		.pwrgood = BIT(29),
@@ -234,6 +192,55 @@ static const struct fan m4062nhp_fpga1_fans[] = {
 		.pwm_offset = 0x025C,
 		.inner_tach_offset = 0x00D4,
 		.outer_tach_offset = 0x00D4,
+	},
+	/* ---- fan5-8 = bottom row (chain 0): status 0x00A4, flags 0x01D0 ---- */
+	[4] = {
+		.status_offset = 0x00A4,
+		.status_change_flags_offset = 0x01D0,
+		.pwrgood = BIT(8),
+		.module_id_mask = GENMASK(7, 4),
+		.module_id_shift = 0x4,
+		.ctrl_fail_led_bit = BIT(0),
+		.ctrl_good_led_bit = BIT(1),
+		.pwm_offset = 0x0240,
+		.inner_tach_offset = 0x00B4,
+		.outer_tach_offset = 0x00B4,
+	},
+	[5] = {
+		.status_offset = 0x00A4,
+		.status_change_flags_offset = 0x01D0,
+		.pwrgood = BIT(15),
+		.module_id_mask = GENMASK(14, 11),
+		.module_id_shift = 0xb,
+		.ctrl_fail_led_bit = BIT(2),
+		.ctrl_good_led_bit = BIT(3),
+		.pwm_offset = 0x0244,
+		.inner_tach_offset = 0x00B8,
+		.outer_tach_offset = 0x00B8,
+	},
+	[6] = {
+		.status_offset = 0x00A4,
+		.status_change_flags_offset = 0x01D0,
+		.pwrgood = BIT(22),
+		.module_id_mask = GENMASK(21, 18),
+		.module_id_shift = 0x12,
+		.ctrl_fail_led_bit = BIT(4),
+		.ctrl_good_led_bit = BIT(5),
+		.pwm_offset = 0x0248,
+		.inner_tach_offset = 0x00BC,
+		.outer_tach_offset = 0x00BC,
+	},
+	[7] = {
+		.status_offset = 0x00A4,
+		.status_change_flags_offset = 0x01D0,
+		.pwrgood = BIT(29),
+		.module_id_mask = GENMASK(28, 25),
+		.module_id_shift = 0x19,
+		.ctrl_fail_led_bit = BIT(6),
+		.ctrl_good_led_bit = BIT(7),
+		.pwm_offset = 0x024C,
+		.inner_tach_offset = 0x00C0,
+		.outer_tach_offset = 0x00C0,
 	},
 };
 
