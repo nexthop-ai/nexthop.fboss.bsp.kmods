@@ -192,10 +192,14 @@ int nh_fpga_fan_get_status(struct nh_fpga_fan_controller *controller,
 	fan = &controller->platform_cfg->fan_cfg->fans[channel];
 	reg_val = ioread32(controller->base + fan->status_offset);
 
-	/* Extract status information */
+	/* Extract status information.
+	 * Presence is driven by the fan module ID nibble: only the known
+	 * IDs are treated as present and avoids treating
+	 * reset/default/unknown values as present.
+	 */
 	status->module_id = (reg_val & fan->module_id_mask) >>
 			    fan->module_id_shift;
-	status->present = (status->module_id != FAN_MODULE_ID_ABSENT);
+	status->present = (status->module_id == FAN_MODULE_ID_DUAL_ROTOR);
 	status->power_good = !!(reg_val & fan->pwrgood);
 	status->inner_tach_ok = !!(reg_val & fan->inner_tach);
 	status->outer_tach_ok = !!(reg_val & fan->outer_tach);
