@@ -247,6 +247,37 @@ static const struct fan_card_status_addr m4062nhp_fpga1_fan = {
 	.fans = m4062nhp_fpga1_fans,
 };
 
+/* Interrupt topology: 3 MSI vectors, 74 masters */
+static const struct nh_fpga_msi_domain_cfg m4062nhp_fpga1_msi_domains[] = {
+	{ .chip_name = "m4062-fpga1-msi-0",
+	  .ier_offset = 0x170,
+	  .isr_offset = 0x174,
+	  .first_master = 0,
+	  .last_master = 9,
+	  .first_hw_irq = 8 },
+	{ .chip_name = "m4062-fpga1-msi-1",
+	  .ier_offset = 0x178,
+	  .isr_offset = 0x17c,
+	  .first_master = 10,
+	  .last_master = 41,
+	  .first_hw_irq = 0 },
+	{ .chip_name = "m4062-fpga1-msi-2",
+	  .ier_offset = 0x180,
+	  .isr_offset = 0x184,
+	  .first_master = 42,
+	  .last_master = 73,
+	  .first_hw_irq = 0 },
+};
+
+static const struct nh_fpga_irq_cfg m4062nhp_fpga1_irq_cfg = {
+	.domains = m4062nhp_fpga1_msi_domains,
+	.num_domains = ARRAY_SIZE(m4062nhp_fpga1_msi_domains),
+	.i2c_csr_base = 0x40000,
+	.i2c_csr_channel_size = 0x200,
+	.ref_clk_hz = 25000000,
+	.min_fpga_version = 0x00,
+};
+
 const struct nh_platform_cfg nh_platform_m4062nhp_fpga1 = {
 	.device_id = NH_FPGA_DEVICE_M4062NHP_FPGA1,
 	.name = "M4062NHP_FPGA1",
@@ -256,5 +287,6 @@ const struct nh_platform_cfg nh_platform_m4062nhp_fpga1 = {
 	.mux_count = ARRAY_SIZE(m4062nhp_fpga1_mux),
 	.port_led_cfg = m4062nhp_fpga1_port_led,
 	.num_ports_per_led = 128,
+	.irq_cfg = &m4062nhp_fpga1_irq_cfg,
 	/* led_core_cfg: NULL/0. */
 };

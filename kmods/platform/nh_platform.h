@@ -29,6 +29,7 @@ static const struct pci_device_id nh_fpga_pci_ids[] = {
 #include "../nh_fpga_i2c_masters.h"
 #include "../nh_fpga_asic_temp.h"
 #include "../nh_fpga_psu.h"
+#include "../nh_fpga_irq.h"
 
 /* Common LED color indices for standard bicolor (red/green) system LEDs */
 enum nh_led_bicolor {
@@ -78,6 +79,9 @@ struct nh_platform_cfg {
 
 	/* PSU presence subsystem */
 	const struct psu_present_cfg *psu_present_cfg;
+
+	/* Interrupt topology, NULL if unsupported */
+	const struct nh_fpga_irq_cfg *irq_cfg;
 };
 
 /**
