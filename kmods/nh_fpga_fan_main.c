@@ -388,7 +388,7 @@ static int nh_fpga_fan_led_set(struct led_classdev *led_cdev,
 	struct nh_fpga_fan_controller *controller = fan_led->fan_ctrl;
 	const struct fan *fan;
 	u32 reg_val, new_reg_val;
-	u32 bit_pos;
+	u32 bit_pos, sibling_bit;
 	bool led_on = (brightness != LED_OFF);
 	int ret;
 
@@ -403,6 +403,9 @@ static int nh_fpga_fan_led_set(struct led_classdev *led_cdev,
 	fan = &controller->platform_cfg->fan_cfg->fans[fan_led->fan_index];
 	bit_pos = fan_led->is_good_led ? fan->ctrl_good_led_bit :
 					 fan->ctrl_fail_led_bit;
+	/* The sibling is whichever of the two color bits isn't bit_pos. */
+	sibling_bit = (fan->ctrl_good_led_bit | fan->ctrl_fail_led_bit) &
+		      ~bit_pos;
 
 	mutex_lock(&controller->lock);
 
@@ -411,11 +414,18 @@ static int nh_fpga_fan_led_set(struct led_classdev *led_cdev,
 			   controller->platform_cfg->fan_cfg->ctrl_offset);
 	new_reg_val = reg_val;
 
-	/* Update LED bit */
-	if (led_on)
+	/* The good/fail bits drive one physical bi-color LED. fan_service only
+	 * ever turns a color on and never clears the other, and the FPGA powers
+	 * up with the fail bit set, so enforce mutual exclusion here: asserting
+	 * one color clears its sibling. brightness_get reads HW, so no cached
+	 * brightness sync is needed for the sibling class device.
+	 */
+	if (led_on) {
 		new_reg_val |= bit_pos;
-	else
+		new_reg_val &= ~sibling_bit;
+	} else {
 		new_reg_val &= ~bit_pos;
+	}
 
 	/* Write updated value */
 	iowrite32(new_reg_val,
@@ -426,7 +436,7 @@ static int nh_fpga_fan_led_set(struct led_classdev *led_cdev,
 
 	dev_dbg(&controller->aux_dev->dev,
 		"LED %s: fan=%d, %s=%s, reg=0x%08x->0x%08x\n", led_cdev->name,
-		fan_led->fan_index + 1, fan_led->is_good_led ? "green" : "red",
+		fan_led->fan_index + 1, fan_led->is_good_led ? "good" : "fail",
 		led_on ? "on" : "off", reg_val, new_reg_val);
 
 	return 0;
@@ -465,6 +475,31 @@ static enum led_brightness nh_fpga_fan_led_get(struct led_classdev *led_cdev)
 	return led_on ? LED_FULL : LED_OFF;
 }
 
+/* Clear all fan LED bits in the Fan Card Control register.
+ *
+ * The FPGA powers up with every fail bit set ("Default On" per the HW spec),
+ * so an unprogrammed, healthy chassis shows a spurious fault color. Clear both
+ * bits for every tray at probe so the LEDs stay off until fan_service drives
+ * them to their good/fail color.
+ */
+static void nh_fpga_fan_init_leds(struct nh_fpga_fan_controller *controller)
+{
+	u32 offset = controller->platform_cfg->fan_cfg->ctrl_offset;
+	u32 reg_val;
+	int i;
+
+	mutex_lock(&controller->lock);
+	reg_val = ioread32(controller->base + offset);
+	for (i = 0; i < controller->num_fan_trays; i++) {
+		const struct fan *fan =
+			&controller->platform_cfg->fan_cfg->fans[i];
+		reg_val &= ~fan->ctrl_good_led_bit;
+		reg_val &= ~fan->ctrl_fail_led_bit;
+	}
+	iowrite32(reg_val, controller->base + offset);
+	mutex_unlock(&controller->lock);
+}
+
 /* Register LED class devices for all fans */
 static int nh_fpga_fan_register_leds(struct nh_fpga_fan_controller *controller)
 {
@@ -472,13 +507,15 @@ static int nh_fpga_fan_register_leds(struct nh_fpga_fan_controller *controller)
 	char led_name[64];
 
 	for (i = 0; i < controller->num_fan_trays; i++) {
-		/* Register green LED */
+		/* Register good (blue) LED */
 		controller->good_leds[i].fan_ctrl = controller;
 		controller->good_leds[i].fan_index = i;
 		controller->good_leds[i].is_good_led = true;
 
-		/* FBOSS naming convention: fan%d_led:green:status */
-		snprintf(led_name, sizeof(led_name), "fan%d_led:green:status",
+		/* good = blue, fail = amber: fan_service and its ConfigValidator
+		 * expect these class-device colors.
+		 */
+		snprintf(led_name, sizeof(led_name), "fan%d_led:blue:status",
 			 i + 1);
 		controller->good_leds[i].led_cdev.name = devm_kstrdup(
 			&controller->aux_dev->dev, led_name, GFP_KERNEL);
@@ -497,18 +534,17 @@ static int nh_fpga_fan_register_leds(struct nh_fpga_fan_controller *controller)
 			&controller->good_leds[i].led_cdev);
 		if (ret) {
 			dev_err(&controller->aux_dev->dev,
-				"Failed to register green LED for fan %d: %d\n",
+				"Failed to register good LED for fan %d: %d\n",
 				i + 1, ret);
 			return ret;
 		}
 
-		/* Register red LED */
+		/* Register fail (amber) LED */
 		controller->fail_leds[i].fan_ctrl = controller;
 		controller->fail_leds[i].fan_index = i;
 		controller->fail_leds[i].is_good_led = false;
 
-		/* FBOSS naming convention: fan%d_led:red:status */
-		snprintf(led_name, sizeof(led_name), "fan%d_led:red:status",
+		snprintf(led_name, sizeof(led_name), "fan%d_led:amber:status",
 			 i + 1);
 		controller->fail_leds[i].led_cdev.name = devm_kstrdup(
 			&controller->aux_dev->dev, led_name, GFP_KERNEL);
@@ -520,15 +556,18 @@ static int nh_fpga_fan_register_leds(struct nh_fpga_fan_controller *controller)
 		controller->fail_leds[i].led_cdev.brightness_get =
 			nh_fpga_fan_led_get;
 		controller->fail_leds[i].led_cdev.max_brightness = LED_FULL;
-		controller->fail_leds[i].led_cdev.brightness =
-			LED_FULL; /* Default red on per spec */
+		/* Bits are cleared to OFF at probe (see nh_fpga_fan_init_leds),
+		 * overriding the FPGA power-up default, so start the cache OFF
+		 * too. brightness_get reads HW, so this is just the cache.
+		 */
+		controller->fail_leds[i].led_cdev.brightness = LED_OFF;
 
 		ret = devm_led_classdev_register(
 			&controller->aux_dev->dev,
 			&controller->fail_leds[i].led_cdev);
 		if (ret) {
 			dev_err(&controller->aux_dev->dev,
-				"Failed to register red LED for fan %d: %d\n",
+				"Failed to register fail LED for fan %d: %d\n",
 				i + 1, ret);
 			return ret;
 		}
@@ -658,11 +697,11 @@ static ssize_t fan_led_simple_show(struct device *dev,
 	good_color = !!(reg_val & fan->ctrl_good_led_bit);
 	fail_color = !!(reg_val & fan->ctrl_fail_led_bit);
 
-	/* FBOSS convention: 1 = good/green, 0 = fail/red, 2 = off */
+	/* FBOSS convention: 1 = good, 0 = fail, 2 = off */
 	if (good_color && !fail_color) {
-		return sysfs_emit(buf, "1\n"); /* Good/Green */
+		return sysfs_emit(buf, "1\n"); /* Good */
 	} else if (fail_color && !good_color) {
-		return sysfs_emit(buf, "0\n"); /* Fail/Red */
+		return sysfs_emit(buf, "0\n"); /* Fail */
 	} else {
 		return sysfs_emit(buf, "2\n"); /* Off or both */
 	}
@@ -699,13 +738,13 @@ static ssize_t fan_led_simple_store(struct device *dev,
 		return ret;
 
 	/* Convert FBOSS values to LED states
-	 * FBOSS standard: 1 = good/green, 0 = fail/red, 2 = off */
+	 * FBOSS standard: 1 = good, 0 = fail, 2 = off */
 	switch (led_val) {
-	case 1: /* Good/Green */
+	case 1: /* Good */
 		good_color = true;
 		fail_color = false;
 		break;
-	case 0: /* Fail/Red */
+	case 0: /* Fail */
 		good_color = false;
 		fail_color = true;
 		break;
@@ -751,7 +790,7 @@ static ssize_t fan_led_simple_store(struct device *dev,
 			   fail_color ? LED_FULL : LED_OFF);
 
 	dev_dbg(&controller->aux_dev->dev,
-		"FBOSS LED control: fan=%d, value=%d, green=%d, red=%d\n",
+		"FBOSS LED control: fan=%d, value=%d, good=%d, fail=%d\n",
 		fan_num + 1, led_val, good_color, fail_color);
 
 	return count;
@@ -960,6 +999,9 @@ static int nh_fpga_fan_probe(struct auxiliary_device *aux_dev,
 			ret);
 		return ret;
 	}
+
+	/* Clear the power-up default before exposing the LEDs. */
+	nh_fpga_fan_init_leds(controller);
 
 	/* Register LED class devices */
 	ret = nh_fpga_fan_register_leds(controller);
