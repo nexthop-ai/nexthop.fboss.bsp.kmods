@@ -3,23 +3,19 @@
 
 #include <linux/types.h>
 #include "nh_platform.h"
+#include "m4062nhp_common.h"
 
 /* ============================================================================
  * Transceiver control
  *
  * FPGA1 carries reset / high-power / present signals for all 128 OSFP
- * ports in four 32-port register windows:
+ * ports in four 32-slot register windows, keyed by physical slot.
  *
- *   Window   Reset   Hi-Pwr   Present   Ports (tentative)
+ *   Window   Reset   Hi-Pwr   Present   Slots
  *   A        0x006C  0x0070   0x0074    1-32
  *   B        0x0030  0x0034   0x0038    33-64
  *   C        0x0044  0x0048   0x004C    65-96
  *   D        0x0058  0x005C   0x0060    97-128
- *
- * FIXME: TBD - The port-number-to-window assignment will be re-confirmed
- * once the M4062NHP DLM serdes mapping lands. Register offsets are
- * correct regardless; only the start_port/end_port labels here may
- * shift.
  * ============================================================================ */
 
 static const struct xcvr_port_group m4062nhp_fpga1_xcvr_groups[] = {
@@ -56,6 +52,8 @@ static const struct xcvr_port_group m4062nhp_fpga1_xcvr_groups[] = {
 static const struct xcvr_ctrl_config m4062nhp_fpga1_xcvr = {
 	.groups = m4062nhp_fpga1_xcvr_groups,
 	.num_groups = ARRAY_SIZE(m4062nhp_fpga1_xcvr_groups),
+	.id_to_slot = m4062nhp_xcvr_id_to_slot,
+	.id_to_slot_len = ARRAY_SIZE(m4062nhp_xcvr_id_to_slot),
 };
 
 /* ============================================================================
@@ -263,5 +261,8 @@ const struct nh_platform_cfg nh_platform_m4062nhp_fpga1 = {
 	.mux_count = ARRAY_SIZE(m4062nhp_fpga1_mux),
 	.port_led_cfg = m4062nhp_fpga1_port_led,
 	.num_ports_per_led = 128,
+	.dual_color_per_led = true,
+	.led_to_id = m4062nhp_led_to_id,
+	.led_to_id_len = ARRAY_SIZE(m4062nhp_led_to_id),
 	/* led_core_cfg: NULL/0. */
 };

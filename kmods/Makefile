@@ -11,6 +11,7 @@ ifneq ($(KERNELRELEASE),)
     # Per-SKU objects (platform/<sku>.o) are appended by each platform integration.
     nh_platform_objs := platform/nh_platform.o \
                         platform/cf2.o \
+                        platform/m4062nhp_common.o \
                         platform/m4062nhp_fpga0.o \
                         platform/m4062nhp_fpga1.o
 
