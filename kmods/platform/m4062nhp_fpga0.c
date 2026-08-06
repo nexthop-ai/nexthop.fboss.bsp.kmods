@@ -219,6 +219,37 @@ static const struct xcvr_ctrl_config m4062nhp_fpga0_xcvr = {
 	.num_groups = ARRAY_SIZE(m4062nhp_fpga0_xcvr_groups),
 };
 
+/* Interrupt topology: 3 MSI vectors, 68 masters */
+static const struct nh_fpga_msi_domain_cfg m4062nhp_fpga0_msi_domains[] = {
+	{ .chip_name = "m4062-fpga0-msi-0",
+	  .ier_offset = 0x170,
+	  .isr_offset = 0x174,
+	  .first_master = 0,
+	  .last_master = 3,
+	  .first_hw_irq = 8 },
+	{ .chip_name = "m4062-fpga0-msi-1",
+	  .ier_offset = 0x178,
+	  .isr_offset = 0x17c,
+	  .first_master = 4,
+	  .last_master = 35,
+	  .first_hw_irq = 0 },
+	{ .chip_name = "m4062-fpga0-msi-2",
+	  .ier_offset = 0x180,
+	  .isr_offset = 0x184,
+	  .first_master = 36,
+	  .last_master = 67,
+	  .first_hw_irq = 0 },
+};
+
+static const struct nh_fpga_irq_cfg m4062nhp_fpga0_irq_cfg = {
+	.domains = m4062nhp_fpga0_msi_domains,
+	.num_domains = ARRAY_SIZE(m4062nhp_fpga0_msi_domains),
+	.i2c_csr_base = 0x40000,
+	.i2c_csr_channel_size = 0x200,
+	.ref_clk_hz = 25000000,
+	.min_fpga_version = 0x00,
+};
+
 const struct nh_platform_cfg nh_platform_m4062nhp_fpga0 = {
 	.device_id = NH_FPGA_DEVICE_M4062NHP_FPGA0,
 	.name = "M4062NHP_FPGA0",
@@ -231,4 +262,5 @@ const struct nh_platform_cfg nh_platform_m4062nhp_fpga0 = {
 	.psu_present_cfg = &m4062nhp_fpga0_psu,
 	.xcvr_cfg = &m4062nhp_fpga0_xcvr,
 	/* fan_cfg: NULL/0. */
+	.irq_cfg = &m4062nhp_fpga0_irq_cfg,
 };

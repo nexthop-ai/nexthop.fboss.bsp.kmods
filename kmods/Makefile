@@ -15,10 +15,11 @@ ifneq ($(KERNELRELEASE),)
                         platform/m4062nhp_fpga1.o
 
     # Object files for fbiob_pci.ko
-    fbiob_pci-objs := nh_fpga_fbiob_main.o nh_fpga_aux.o
+    fbiob_pci-objs := nh_fpga_fbiob_main.o nh_fpga_aux.o nh_fpga_irq.o \
+                      $(nh_platform_objs)
 
     # Object files for nh_fpga_i2c.ko
-    nh_fpga_i2c-objs := nh_fpga_i2c_main.o fpga_axi_iic_common.o \
+    nh_fpga_i2c-objs := nh_fpga_i2c_main.o \
                         $(nh_platform_objs)
 
     # nh_fpga_mux.ko is a single-file module, no -objs needed
