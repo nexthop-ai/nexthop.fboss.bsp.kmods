@@ -18,9 +18,9 @@
  * across all xcvr port devices. */
 static DEFINE_MUTEX(xcvr_reg_lock);
 
-/* Look up the port group covering @port_num. */
+/* Look up the port group covering @slot. */
 const struct xcvr_port_group *
-xcvr_ctrl_find_port_group(const struct xcvr_ctrl_config *cfg, u32 port_num)
+xcvr_ctrl_find_port_group(const struct xcvr_ctrl_config *cfg, u32 slot)
 {
 	u32 i;
 
@@ -30,10 +30,19 @@ xcvr_ctrl_find_port_group(const struct xcvr_ctrl_config *cfg, u32 port_num)
 	for (i = 0; i < cfg->num_groups; i++) {
 		const struct xcvr_port_group *g = &cfg->groups[i];
 
-		if (port_num >= g->start_port && port_num <= g->end_port)
+		if (slot >= g->start_port && slot <= g->end_port)
 			return g;
 	}
 	return NULL;
+}
+
+/* Resolve a transceiver id to its physical slot; identity if the platform
+ * has no id_to_slot table. */
+u32 xcvr_ctrl_slot_for_port(const struct xcvr_ctrl_config *cfg, u32 port_num)
+{
+	if (!cfg || !cfg->id_to_slot || port_num >= cfg->id_to_slot_len)
+		return port_num;
+	return cfg->id_to_slot[port_num];
 }
 
 /* Read transceiver control register */
@@ -213,6 +222,7 @@ static int nh_xcvr_ctrl_probe(struct auxiliary_device *aux_dev,
 	const struct nh_platform_cfg *platform_cfg;
 	struct nh_xcvr_ctrl *ctrl;
 	u16 device_id;
+	u32 slot;
 	int ret;
 
 	fpga_aux_dev = container_of(aux_dev, struct nh_fpga_aux_dev, aux_dev);
@@ -258,26 +268,30 @@ static int nh_xcvr_ctrl_probe(struct auxiliary_device *aux_dev,
 	ctrl->platform_cfg = platform_cfg;
 	ctrl->aux_dev = aux_dev;
 	ctrl->base = fpga_aux_dev->csr_base;
+	/* port_num is the transceiver id (names the sysfs attrs); the register
+	 * window is looked up by slot - see xcvr_ctrl_config::id_to_slot. */
 	ctrl->port_num = fpga_aux_dev->dev_info.xcvr_data.port_num;
 
-	ctrl->group = xcvr_ctrl_find_port_group(platform_cfg->xcvr_cfg,
-						ctrl->port_num);
+	slot = xcvr_ctrl_slot_for_port(platform_cfg->xcvr_cfg, ctrl->port_num);
+
+	ctrl->group = xcvr_ctrl_find_port_group(platform_cfg->xcvr_cfg, slot);
 	if (!ctrl->group) {
 		dev_err(&aux_dev->dev,
-			"port %u not covered by any xcvr_port_group on device 0x%04x\n",
-			ctrl->port_num, device_id);
+			"port %u (slot %u) not covered by any xcvr_port_group on device 0x%04x\n",
+			ctrl->port_num, slot, device_id);
 		return -ENODEV;
 	}
-	/* Each OSFP group covers at most 32 ports; the port's bit position
-	 * within its 32-bit register is its 0-based offset within the group,
-	 * shared across reset/lp/present. A fixed_bits group (e.g. the mgmt
-	 * QSFP) instead pins each signal to its own bit. */
+	/* Each OSFP group covers at most 32 slots; the slot's bit
+	 * position within its 32-bit register is its 0-based offset
+	 * within the group, shared across reset/lp/present. A
+	 * fixed_bits group (e.g. the mgmt QSFP) instead pins each
+	 * signal to its own bit. */
 	if (ctrl->group->fixed_bits) {
 		ctrl->reset_bit = ctrl->group->reset_bit;
 		ctrl->lp_mode_bit = ctrl->group->lp_mode_bit;
 		ctrl->present_bit = ctrl->group->present_bit;
 	} else {
-		u32 bit_pos = ctrl->port_num - ctrl->group->start_port;
+		u32 bit_pos = slot - ctrl->group->start_port;
 
 		ctrl->reset_bit = bit_pos;
 		ctrl->lp_mode_bit = bit_pos;

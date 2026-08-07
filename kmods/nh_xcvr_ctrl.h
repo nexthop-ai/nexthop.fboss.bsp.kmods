@@ -48,16 +48,28 @@ struct nh_xcvr_ctrl {
 		*platform_cfg; /* Per-device platform descriptor */
 };
 
-/* Per-platform xcvr register layout */
+/* Per-platform xcvr register layout. @groups is keyed by slot (the register
+ * window numbering). Set @id_to_slot only when transceiver id != slot
+ * (m4062nhp): id_to_slot[id] gives the slot for @groups, while id names the
+ * sysfs attrs. NULL means slot == id. */
 struct xcvr_ctrl_config {
 	const struct xcvr_port_group *groups;
 	u32 num_groups;
+	const u32 *id_to_slot; /* id_to_slot[id], 1-based, NULL == identity */
+	u32 id_to_slot_len; /* number of valid entries, i.e. max id + 1 */
 };
 
 /* Look up the port group whose [start_port, end_port] range covers
- * @port_num. Returns NULL if no group matches.
+ * @slot (physical slot space; see xcvr_ctrl_config::id_to_slot above).
+ * Returns NULL if no group matches.
  */
 const struct xcvr_port_group *
-xcvr_ctrl_find_port_group(const struct xcvr_ctrl_config *cfg, u32 port_num);
+xcvr_ctrl_find_port_group(const struct xcvr_ctrl_config *cfg, u32 slot);
+
+/* Resolve @port_num (transceiver id, as named in sysfs) to its physical
+ * slot via @cfg's id_to_slot table, or return it unchanged if the platform
+ * did not set one (identity mapping).
+ */
+u32 xcvr_ctrl_slot_for_port(const struct xcvr_ctrl_config *cfg, u32 port_num);
 
 #endif /* _NH_XCVR_CTRL_H_ */

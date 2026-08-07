@@ -19,6 +19,15 @@
 /* Ports share the same register */
 static DEFINE_MUTEX(port_led_reg_lock);
 
+/* Resolve a physical LED number to the transceiver id its sysfs node is
+ * named after; identity if the platform has no led_to_id table. */
+static u32 port_led_id_for_num(const struct nh_platform_cfg *cfg, u32 num)
+{
+	if (!cfg->led_to_id || num >= cfg->led_to_id_len)
+		return num;
+	return cfg->led_to_id[num];
+}
+
 /* Get bit position and offset for port */
 static int
 nh_port_led_get_bit_and_offset(const struct port_led_color_addr *color_table,
@@ -135,6 +144,13 @@ static int nh_port_led_probe(struct auxiliary_device *aux_dev,
 	    led_idx < 1 || led_idx > 2)
 		return -EINVAL;
 
+	if (platform_cfg->dual_color_per_led && led_idx != 1) {
+		dev_err(&aux_dev->dev,
+			"led_idx %d invalid with dual_color_per_led on device 0x%04x\n",
+			led_idx, device_id);
+		return -EINVAL;
+	}
+
 	/* Reject ports this FPGA's range tables do not cover, otherwise we would
 	 * register an LED whose set path always fails. */
 	{
@@ -158,44 +174,56 @@ static int nh_port_led_probe(struct auxiliary_device *aux_dev,
 		return -ENOMEM;
 
 	ctrl->platform_cfg = platform_cfg;
+	ctrl->aux_dev = aux_dev;
+	ctrl->base = fpga_aux_dev->parent->mmio_base;
+	ctrl->num_leds =
+		platform_cfg->dual_color_per_led ? PORT_LED_NUM_COLORS : 1;
 
-	ctrl->leds =
-		devm_kzalloc(&aux_dev->dev, sizeof(*ctrl->leds), GFP_KERNEL);
+	ctrl->leds = devm_kcalloc(&aux_dev->dev, ctrl->num_leds,
+				  sizeof(*ctrl->leds), GFP_KERNEL);
 	if (!ctrl->leds)
 		return -ENOMEM;
 
-	ctrl->aux_dev = aux_dev;
-	ctrl->base = fpga_aux_dev->parent->mmio_base;
-	ctrl->num_leds = 1;
+	/* Name by transceiver id, not the physical LED number used for register
+	 * access. In dual-color mode both colors share one physical LED at index
+	 * 1; otherwise led_idx is the index and selects the color. */
+	u32 tcvr_id = port_led_id_for_num(platform_cfg, port);
+	int name_idx = platform_cfg->dual_color_per_led ? 1 : led_idx;
 
-	struct port_led_dev *led = &ctrl->leds[0];
-	led->ctrl = ctrl;
-	led->port_num = port;
-	led->color = (led_idx == 1) ? PORT_LED_BLUE : PORT_LED_AMBER;
+	for (int i = 0; i < ctrl->num_leds; i++) {
+		struct port_led_dev *led = &ctrl->leds[i];
+		char name[64];
+		int ret;
 
-	char name[64];
-	snprintf(name, sizeof(name), "port%d_led%d:%s:" LED_FUNCTION_STATUS,
-		 port, led_idx, color_names[led->color]);
-	led->cdev.name = devm_kstrdup(&aux_dev->dev, name, GFP_KERNEL);
-	if (!led->cdev.name)
-		return -ENOMEM;
+		led->ctrl = ctrl;
+		led->port_num = port;
+		led->color =
+			platform_cfg->dual_color_per_led ?
+				i :
+				(led_idx == 1 ? PORT_LED_BLUE : PORT_LED_AMBER);
 
-	led->cdev.brightness_get = nh_port_led_brightness_get;
-	led->cdev.brightness_set_blocking = nh_port_led_brightness_set;
-	led->cdev.max_brightness = 1;
+		snprintf(name, sizeof(name),
+			 "port%d_led%d:%s:" LED_FUNCTION_STATUS, tcvr_id,
+			 name_idx, color_names[led->color]);
+		led->cdev.name = devm_kstrdup(&aux_dev->dev, name, GFP_KERNEL);
+		if (!led->cdev.name)
+			return -ENOMEM;
 
-	int ret = devm_led_classdev_register(&aux_dev->dev, &led->cdev);
-	if (ret)
-		return ret;
+		led->cdev.brightness_get = nh_port_led_brightness_get;
+		led->cdev.brightness_set_blocking = nh_port_led_brightness_set;
+		led->cdev.max_brightness = 1;
 
-	/* Initialize LED trigger support */
-	ret = led_trigger_init(led->cdev.dev);
-	if (ret) {
-		dev_warn(&aux_dev->dev,
-			 "Failed to initialize LED trigger: %d\n", ret);
-		/* Non-fatal - continue without trigger support */
+		ret = devm_led_classdev_register(&aux_dev->dev, &led->cdev);
+		if (ret)
+			return ret;
+
+		/* Trigger init failure is non-fatal: keep the LED without it. */
+		ret = led_trigger_init(led->cdev.dev);
+		if (ret)
+			dev_warn(&aux_dev->dev,
+				 "Failed to initialize LED trigger: %d\n", ret);
+		led->trigger_inited = !ret;
 	}
-	led->trigger_inited = !ret;
 
 	auxiliary_set_drvdata(aux_dev, ctrl);
 

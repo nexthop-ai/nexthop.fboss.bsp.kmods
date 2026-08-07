@@ -66,6 +66,16 @@ struct nh_platform_cfg {
 
 	u32 num_ports_per_led;
 
+	/* When true, one aux device registers both color channels of a port's
+	 * LED (named port<id>_led1). When false, led_idx selects a single color
+	 * (1 = blue, 2 = amber). */
+	bool dual_color_per_led;
+
+	/* Optional physical-LED-number -> transceiver id remap for the port LED
+	 * sysfs name (port<id>_led). NULL names the node by port_num directly. */
+	const u32 *led_to_id;
+	u32 led_to_id_len;
+
 	/* Transceiver control subsystem */
 	const struct xcvr_ctrl_config *xcvr_cfg;
 

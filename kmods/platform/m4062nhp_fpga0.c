@@ -4,6 +4,7 @@
 #include <linux/bits.h>
 #include <linux/types.h>
 #include "nh_platform.h"
+#include "m4062nhp_common.h"
 
 /* ============================================================================
  * LED — PSU / FAN / SYS status LEDs
@@ -79,8 +80,10 @@ m4062nhp_fpga0_led_info[NH_LED_TYPE_MAX][M4062NHP_LED_NUM_COLORS] = {
 		},
 	},
 	[NH_LED_TYPE_MGMT_QSFP] = {
+		/* Both colors share one name so XcvrLib sees one bicolor LED
+		 * (port129_led1:{blue,amber}:status). */
 		[M4062NHP_LED_COLOR_FAIL] = {
-			.name = "port129_led2",
+			.name = "port129_led1",
 			.color_offset = 16,
 			.color_field_width = 1,
 			.blink_bit = 18,
@@ -225,6 +228,9 @@ const struct nh_platform_cfg nh_platform_m4062nhp_fpga0 = {
 	.led_core_cfg = &m4062nhp_fpga0_led_config,
 	.port_led_cfg = m4062nhp_fpga0_port_led,
 	.num_ports_per_led = 128,
+	.dual_color_per_led = true,
+	.led_to_id = m4062nhp_led_to_id,
+	.led_to_id_len = ARRAY_SIZE(m4062nhp_led_to_id),
 	.mux_cfg = m4062nhp_fpga0_mux,
 	.mux_count = ARRAY_SIZE(m4062nhp_fpga0_mux),
 	.asic_temp_cfg = &m4062nhp_fpga0_asic_temp,
