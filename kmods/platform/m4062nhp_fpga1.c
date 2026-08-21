@@ -249,6 +249,7 @@ static const struct fan_card_status_addr m4062nhp_fpga1_fan = {
 	.pwm_mask = 0xFF, /* PWM duty in [7:0] */
 	.inner_tach_mask = GENMASK(15, 0),
 	.outer_tach_mask = GENMASK(31, 16),
+	.num_rotors = 2,
 	.fans = m4062nhp_fpga1_fans,
 };
 

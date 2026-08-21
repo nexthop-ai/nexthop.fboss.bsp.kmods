@@ -247,6 +247,7 @@ static umode_t nh_fpga_fan_is_visible(const void *data,
 	case hwmon_fan:
 		switch (attr) {
 		case hwmon_fan_input:
+		case hwmon_fan_label:
 			return 0444;
 		default:
 			break;
@@ -281,15 +282,22 @@ static int nh_fpga_fan_read(struct device *dev, enum hwmon_sensor_types type,
 		break;
 	case hwmon_fan:
 		if (attr == hwmon_fan_input) {
-			/* Return inner tach for even channels, outer for odd */
-			fan_channel = channel / 2;
+			const struct fan_card_status_addr *fan_cfg =
+				controller->platform_cfg->fan_cfg;
+			bool inner;
+
+			/* A tray's rotors occupy consecutive channels, inner
+			 * first, so a single-tach tray is just one channel.
+			 */
+			fan_channel = channel / fan_cfg->num_rotors;
+			inner = (channel % fan_cfg->num_rotors) == 0;
 			/* Check if fan is present before reading tachometer */
 			ret = nh_fpga_fan_get_status_and_presence(
 				controller, fan_channel, dev, "Fan speed read");
 			if (ret)
 				return ret;
-			tach_cycles = nh_fpga_fan_read_tach(
-				controller, fan_channel, (channel % 2) == 0);
+			tach_cycles = nh_fpga_fan_read_tach(controller,
+							    fan_channel, inner);
 			*val = nh_fpga_fan_tach_to_rpm(tach_cycles);
 			return 0;
 		}
@@ -324,20 +332,48 @@ static int nh_fpga_fan_write(struct device *dev, enum hwmon_sensor_types type,
 	return -EOPNOTSUPP;
 }
 
+/* hwmon read_string function, serving fanN_label.
+ *
+ * Unlike the tachometer read this deliberately does not check presence: a label
+ * is static identity, not a measurement, and lm_sensors reads labels for absent
+ * fans too.
+ */
+static int nh_fpga_fan_read_string(struct device *dev,
+				   enum hwmon_sensor_types type, u32 attr,
+				   int channel, const char **str)
+{
+	struct nh_fpga_fan_controller *controller = dev_get_drvdata(dev);
+
+	if (type != hwmon_fan || attr != hwmon_fan_label)
+		return -EOPNOTSUPP;
+
+	*str = controller->fan_labels[channel];
+	return 0;
+}
+
 static const struct hwmon_ops nh_fpga_fan_hwmon_ops = {
 	.is_visible = nh_fpga_fan_is_visible,
 	.read = nh_fpga_fan_read,
+	.read_string = nh_fpga_fan_read_string,
 	.write = nh_fpga_fan_write,
 };
 
-/* Build a hwmon_chip_info that advertises @num_fans pwm channels and
- * @num_fans*2 fan-input channels (inner + outer rotor for each fan).
- * Memory is devm-managed against @dev so it lives as long as the
- * hwmon device.
+/* Number of hwmon fan channels this platform exposes: one per tachometer. */
+static u32 nh_fpga_fan_num_tach(const struct fan_card_status_addr *fan_cfg)
+{
+	return fan_cfg->num_fan_controllers * fan_cfg->num_rotors;
+}
+
+/* Build a hwmon_chip_info that advertises one pwm channel per fan tray and
+ * one fan-input channel per tachometer. Memory is devm-managed against @dev
+ * so it lives as long as the hwmon device.
  */
 static const struct hwmon_chip_info *
-nh_fpga_fan_build_chip_info(struct device *dev, u32 num_fans)
+nh_fpga_fan_build_chip_info(struct device *dev,
+			    const struct fan_card_status_addr *fan_cfg)
 {
+	u32 num_fans = fan_cfg->num_fan_controllers;
+	u32 num_tach = nh_fpga_fan_num_tach(fan_cfg);
 	struct hwmon_chip_info *chip;
 	struct hwmon_channel_info *pwm_info, *fan_info;
 	const struct hwmon_channel_info **info_arr;
@@ -350,7 +386,7 @@ nh_fpga_fan_build_chip_info(struct device *dev, u32 num_fans)
 	info_arr = devm_kcalloc(dev, 3, sizeof(*info_arr), GFP_KERNEL);
 	pwm_config = devm_kcalloc(dev, num_fans + 1, sizeof(*pwm_config),
 				  GFP_KERNEL);
-	fan_config = devm_kcalloc(dev, num_fans * 2 + 1, sizeof(*fan_config),
+	fan_config = devm_kcalloc(dev, num_tach + 1, sizeof(*fan_config),
 				  GFP_KERNEL);
 	if (!chip || !pwm_info || !fan_info || !info_arr || !pwm_config ||
 	    !fan_config)
@@ -358,8 +394,8 @@ nh_fpga_fan_build_chip_info(struct device *dev, u32 num_fans)
 
 	for (i = 0; i < num_fans; i++)
 		pwm_config[i] = HWMON_PWM_INPUT;
-	for (i = 0; i < num_fans * 2; i++)
-		fan_config[i] = HWMON_F_INPUT;
+	for (i = 0; i < num_tach; i++)
+		fan_config[i] = HWMON_F_INPUT | HWMON_F_LABEL;
 
 	pwm_info->type = hwmon_pwm;
 	pwm_info->config = pwm_config;
@@ -373,6 +409,47 @@ nh_fpga_fan_build_chip_info(struct device *dev, u32 num_fans)
 	chip->ops = &nh_fpga_fan_hwmon_ops;
 	chip->info = info_arr;
 	return chip;
+}
+
+/* Build the fanN_label strings, one per hwmon fan channel.
+ *
+ * Raw channel numbers say nothing about which physical rotor they read: the
+ * labels are what let a technician map a failing channel to a fan tray. The
+ * channel-to-tray mapping here must match the read path, so both derive it
+ * from num_rotors: dual-tach fans get fan<tray>_inner / fan<tray>_outer,
+ * single-tach fans just fan<tray>.
+ *
+ * read_string hands out a borrowed pointer, so the strings are formatted once
+ * here rather than per read. Memory is devm-managed against @dev.
+ */
+static const char **
+nh_fpga_fan_build_labels(struct device *dev,
+			 const struct fan_card_status_addr *fan_cfg)
+{
+	u32 num_tach = nh_fpga_fan_num_tach(fan_cfg);
+	const char **labels;
+	u32 i;
+
+	labels = devm_kcalloc(dev, num_tach, sizeof(*labels), GFP_KERNEL);
+	if (!labels)
+		return NULL;
+
+	for (i = 0; i < num_tach; i++) {
+		u32 tray = i / fan_cfg->num_rotors + 1;
+
+		if (fan_cfg->num_rotors > 1)
+			labels[i] = devm_kasprintf(
+				dev, GFP_KERNEL, "fan%u_%s", tray,
+				(i % fan_cfg->num_rotors) == 0 ? "inner" :
+								 "outer");
+		else
+			labels[i] =
+				devm_kasprintf(dev, GFP_KERNEL, "fan%u", tray);
+		if (!labels[i])
+			return NULL;
+	}
+
+	return labels;
 }
 
 /* ============================================================================
@@ -892,6 +969,12 @@ static int nh_fpga_fan_probe(struct auxiliary_device *aux_dev,
 		return -ENODEV;
 	}
 
+	/* The channel-to-tray mapping divides by num_rotors. */
+	if (!platform_cfg->fan_cfg->num_rotors) {
+		dev_err(dev, "Platform table declares no fan rotors\n");
+		return -EINVAL;
+	}
+
 	/* Allocate fan controller structure */
 	controller =
 		devm_kzalloc(&aux_dev->dev, sizeof(*controller), GFP_KERNEL);
@@ -970,14 +1053,18 @@ static int nh_fpga_fan_probe(struct auxiliary_device *aux_dev,
 	if (!controller->attr_group)
 		return -ENOMEM;
 
+	controller->fan_labels =
+		nh_fpga_fan_build_labels(&aux_dev->dev, platform_cfg->fan_cfg);
+	if (!controller->fan_labels)
+		return -ENOMEM;
+
 	/* Register hwmon device with a chip_info sized to this platform's
 	 * fan count rather than a static MAX-sized array.
 	 */
 	{
 		const struct hwmon_chip_info *chip_info =
-			nh_fpga_fan_build_chip_info(
-				&aux_dev->dev,
-				platform_cfg->fan_cfg->num_fan_controllers);
+			nh_fpga_fan_build_chip_info(&aux_dev->dev,
+						    platform_cfg->fan_cfg);
 		const struct attribute_group **groups;
 
 		if (!chip_info)
