@@ -43,6 +43,8 @@ mkdir -p %{buildroot}/usr/lib/udev/rules.d
 install -m 755 %{_sourcedir}/kmods/scripts/nh-spd-temp-symlinks.sh %{buildroot}/usr/libexec/nexthop_bsp/
 install -m 644 %{_sourcedir}/kmods/systemd/nexthop-bsp-spd-temp-symlinks.service %{buildroot}/usr/lib/systemd/system/
 install -m 644 %{_sourcedir}/kmods/udev/70-nexthop-spd-temp.rules %{buildroot}/usr/lib/udev/rules.d/
+install -m 755 %{_sourcedir}/kmods/scripts/nh-idprom-symlink.sh %{buildroot}/usr/libexec/nexthop_bsp/
+install -m 644 %{_sourcedir}/kmods/systemd/nexthop-bsp-idprom-symlink.service %{buildroot}/usr/lib/systemd/system/
 
 %post
 # Run depmod to update module dependencies
@@ -53,6 +55,8 @@ if [ -x /usr/bin/systemctl ]; then
     /usr/bin/systemctl daemon-reload || :
     /usr/bin/systemctl enable nexthop-bsp-spd-temp-symlinks.service || :
     /usr/bin/systemctl start nexthop-bsp-spd-temp-symlinks.service || :
+    /usr/bin/systemctl enable nexthop-bsp-idprom-symlink.service || :
+    /usr/bin/systemctl start nexthop-bsp-idprom-symlink.service || :
 fi
 if [ -x /usr/bin/udevadm ]; then
     /usr/bin/udevadm control --reload-rules || :
@@ -66,6 +70,7 @@ fi
 
 if [ $1 -eq 0 ] && [ -x /usr/bin/systemctl ]; then
     /usr/bin/systemctl disable --now nexthop-bsp-spd-temp-symlinks.service || :
+    /usr/bin/systemctl disable --now nexthop-bsp-idprom-symlink.service || :
 fi
 
 %postun
@@ -81,6 +86,8 @@ fi
 /usr/libexec/nexthop_bsp/nh-spd-temp-symlinks.sh
 /usr/lib/systemd/system/nexthop-bsp-spd-temp-symlinks.service
 /usr/lib/udev/rules.d/70-nexthop-spd-temp.rules
+/usr/libexec/nexthop_bsp/nh-idprom-symlink.sh
+/usr/lib/systemd/system/nexthop-bsp-idprom-symlink.service
 
 %changelog
 * Mon Aug 25 2025 Arif Mohammad <marif@nexthop.ai> - 1.0.0-1
