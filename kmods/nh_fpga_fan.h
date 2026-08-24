@@ -53,6 +53,8 @@ struct nh_fpga_fan_controller {
 	u32 *fan_pwm_offsets;
 	u32 *fan_inner_tach_offsets;
 	u32 *fan_outer_tach_offsets;
+	/* fanN_label strings, one per hwmon fan channel */
+	const char **fan_labels;
 	const struct nh_platform_cfg
 		*platform_cfg; /* Per-device platform descriptor */
 	const struct attribute_group
@@ -107,6 +109,13 @@ struct fan_card_status_addr {
 	u32 pwm_mask;
 	u32 inner_tach_mask;
 	u32 outer_tach_mask;
+
+	/* Tachometers per fan tray: 1 (inner only) or 2 (inner + outer). A
+	 * tray's rotors occupy consecutive hwmon fan channels, inner first,
+	 * so this governs the fan channel count, the channel-to-tray mapping
+	 * and the fanN_label text together.
+	 */
+	u32 num_rotors;
 
 	const struct fan *fans;
 };
