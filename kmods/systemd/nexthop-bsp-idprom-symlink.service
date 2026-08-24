@@ -1,0 +1,15 @@
+# Publishes /run/nexthop_bsp/eeproms/SCM_IDPROM for platform_manager, so its
+# config does not have to name the CPU I2C controller the IDPROM hangs off.
+[Unit]
+Description=Publish a revision-independent handle for the CPU card IDPROM
+After=systemd-udevd.service
+Before=platform_manager.service
+ConditionPathExistsGlob=/sys/devices/platform/AMDI0010:*
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/nexthop_bsp/nh-idprom-symlink.sh
+
+[Install]
+WantedBy=multi-user.target
