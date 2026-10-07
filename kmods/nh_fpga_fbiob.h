@@ -11,6 +11,12 @@
 
 #include "platform_manager/uapi/fbiob-ioctl.h"
 
+struct regmap;
+struct regmap_irq_chip;
+struct regmap_irq_chip_data;
+struct clk_hw;
+struct nh_fpga_irq_cfg;
+
 /* Auxiliary device structure */
 struct nh_fpga_aux_dev {
 	struct auxiliary_device aux_dev;
@@ -31,6 +37,13 @@ struct nh_fpga_pci_dev {
 	struct mutex lock; /**< Device lock */
 	int minor; /**< Minor number */
 	struct list_head aux_dev_list; /**< List of auxiliary devices */
+
+	/* Interrupt-driven I2C plumbing (see nh_fpga_irq.c); devm-managed. */
+	const struct nh_fpga_irq_cfg *irq_cfg;
+	struct regmap *regmap; /**< regmap over BAR0 for the irq chips */
+	struct regmap_irq_chip *irq_chips; /**< one per MSI domain */
+	struct regmap_irq_chip_data **irq_chip_data; /**< one per MSI domain */
+	struct clk_hw *ref_clk_hw; /**< AXI IIC reference clock */
 };
 
 /* Function prototypes for auxiliary device management */

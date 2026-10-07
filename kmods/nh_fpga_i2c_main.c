@@ -2,23 +2,33 @@
 // Copyright (c) 2025 Nexthop Systems Inc.
 
 #include <linux/module.h>
+#include <linux/atomic.h>
 #include <linux/auxiliary_bus.h>
-#include <linux/i2c.h>
-#include <linux/slab.h>
 #include <linux/device.h>
-#include <linux/stdarg.h>
-#include <linux/pci.h>
+#include <linux/i2c.h>
 #include <linux/kernel.h>
+#include <linux/pci.h>
+#include <linux/slab.h>
 #include <linux/string.h>
-#include "nh_fpga_i2c.h"
+#include <linux/clk-provider.h>
+#include <linux/clkdev.h>
+#include <linux/platform_device.h>
+#include <linux/notifier.h>
+#include <linux/property.h>
+#include <linux/sysfs.h>
+
 #include "nh_fpga_fbiob.h"
+#include "nh_fpga_i2c.h"
 #include "nh_fpga_i2c_mux.h"
-#include "fpga_axi_iic_common.h"
+#include "nh_fpga_irq.h"
 #include "nh_fpga_i2c_masters.h"
 #include "platform/nh_platform.h"
 
 #define DRIVER_NAME "nh_fpga_i2c"
 #define DRIVER_VERSION "1.0"
+
+/* Monotonic id for the global xiic-i2c platform-device namespace. */
+static atomic_t nh_fpga_xiic_pdev_id = ATOMIC_INIT(0);
 
 /*
  * I2C master controllers occupy a contiguous block of the FPGA CSR space,
@@ -94,6 +104,8 @@ static int configure_mux_support(struct nh_fpga_i2c *i2c,
 				platform_cfg->mux_cfg[j].num_channels;
 			i2c->mux_reg = fpga_aux_dev->parent->mmio_base +
 				       platform_cfg->mux_cfg[j].reg_offset;
+			i2c->mux_pdata.mux_reg = i2c->mux_reg;
+			i2c->mux_pdata.num_channels = i2c->num_mux_channels;
 			dev_dbg(&aux_dev->dev,
 				"%s master %d: %s, %d channels at offset 0x%04x\n",
 				platform_cfg->name, logical_master,
@@ -109,128 +121,24 @@ static int configure_mux_support(struct nh_fpga_i2c *i2c,
 	return 0;
 }
 
-/* Forward declarations */
-static int fpga_axi_iic_access(struct i2c_adapter *adap, struct i2c_msg *msgs,
-			       int num);
-
-/* Logging function for the common library */
-static void nh_fpga_i2c_log(struct fpga_axi_iic *axi_iic, int level,
-			    const char *fmt, ...)
-{
-	struct nh_fpga_i2c *i2c =
-		container_of(axi_iic, struct nh_fpga_i2c, axi_iic);
-	va_list args;
-	char buf[256];
-
-	va_start(args, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
-
-	switch (level) {
-	case AXI_IIC_LOG_ERR:
-		dev_err(&i2c->adapter.dev, "%s", buf);
-		break;
-	case AXI_IIC_LOG_WARN:
-		dev_warn(&i2c->adapter.dev, "%s", buf);
-		break;
-	case AXI_IIC_LOG_INFO:
-		dev_info(&i2c->adapter.dev, "%s", buf);
-		break;
-	case AXI_IIC_LOG_DBG:
-	default:
-		dev_dbg(&i2c->adapter.dev, "%s", buf);
-		break;
-	}
-}
-
-static const struct i2c_algorithm axi_iic_algorithm = {
-	.master_xfer = fpga_axi_iic_access,
-	.functionality = fpga_axi_iic_func,
-};
-
-/* The AXI IIC dynamic mode read byte count is an 8 bit field; larger
- * reads truncate modulo 256 and bit 8 collides with the START flag.
- * Let the i2c core reject them before they reach the controller. */
-static const struct i2c_adapter_quirks axi_iic_quirks = {
-	.max_read_len = 255,
-};
-
-/* Create virtual I2C mux devices for FBOSS discovery */
-static int create_fpga_mux_devices(struct nh_fpga_i2c *i2c, int master_id)
-{
-	struct i2c_board_info mux_info;
-	struct i2c_client *mux_client;
-	struct fpga_mux_platform_data *pdata;
-
-	/* Only create mux for masters that have mux functionality */
-	if (i2c->num_mux_channels == 0)
-		return 0;
-
-	/* Create a virtual mux device on this I2C bus */
-	memset(&mux_info, 0, sizeof(mux_info));
-	mux_info.addr = 0x71; /* Virtual i2c mux address */
-	strscpy(mux_info.type, "fpga-mux",
-		sizeof(mux_info.type)); /* Our custom mux type */
-
-	/* Pass FPGA-specific data via platform_data */
-	pdata = devm_kzalloc(&i2c->aux_dev->dev, sizeof(*pdata), GFP_KERNEL);
-	if (!pdata)
-		return -ENOMEM;
-
-	pdata->mux_reg = i2c->mux_reg;
-	pdata->num_channels = i2c->num_mux_channels;
-	mux_info.platform_data = pdata;
-
-	mux_client = i2c_new_client_device(&i2c->adapter, &mux_info);
-	if (IS_ERR(mux_client)) {
-		dev_err(&i2c->aux_dev->dev, "Failed to create mux device\n");
-		return PTR_ERR(mux_client);
-	}
-
-	/* Store client for cleanup */
-	i2c->mux_client = mux_client;
-
-	dev_info(&i2c->aux_dev->dev,
-		 "Created FPGA mux device at 0x%02x with %d channels\n",
-		 mux_info.addr, i2c->num_mux_channels);
-
-	return 0;
-}
-
-/* I2C master transfer function with retry logic */
-static int fpga_axi_iic_access(struct i2c_adapter *adap, struct i2c_msg *msgs,
-			       int num)
-{
-	struct nh_fpga_i2c *i2c = i2c_get_adapdata(adap);
-	int ret;
-
-	dev_dbg(&adap->dev,
-		"I2C transfer: %d messages, first addr=0x%02x, len=%d, flags=0x%x\n",
-		num, msgs[0].addr, msgs[0].len, msgs[0].flags);
-
-	ret = fpga_axi_iic_xfer(&i2c->axi_iic, msgs, num);
-
-	dev_dbg(&adap->dev, "I2C transfer result: %d\n", ret);
-	return ret;
-}
-
 /* Auxiliary device probe function */
 int nh_fpga_i2c_probe(struct auxiliary_device *aux_dev,
 		      const struct auxiliary_device_id *id)
 {
 	struct nh_fpga_aux_dev *fpga_aux_dev;
 	struct nh_fpga_i2c *i2c;
-	int ret;
-	int master_id;
+	struct clk_hw *clk_hw;
+	resource_size_t mem_start, mem_size;
+	int ret, master_id, pdev_id, virq;
 
 	fpga_aux_dev = container_of(aux_dev, struct nh_fpga_aux_dev, aux_dev);
 
-	/* Allocate I2C controller structure */
 	i2c = devm_kzalloc(&aux_dev->dev, sizeof(*i2c), GFP_KERNEL);
 	if (!i2c)
 		return -ENOMEM;
 
 	i2c->aux_dev = aux_dev;
+	i2c->master_bus_num = -1;
 	master_id = fpga_aux_dev->dev_info.id.id;
 
 	dev_info(&aux_dev->dev,
@@ -238,37 +146,7 @@ int nh_fpga_i2c_probe(struct auxiliary_device *aux_dev,
 		 master_id, fpga_aux_dev->dev_info.csr_offset,
 		 fpga_aux_dev->csr_base);
 
-	i2c->axi_iic.base = fpga_aux_dev->csr_base;
-	i2c->axi_iic.log_func = nh_fpga_i2c_log;
-	i2c->axi_iic.log_data = i2c;
-
-	ret = fpga_axi_iic_init(&i2c->axi_iic);
-	if (ret) {
-		dev_err(&aux_dev->dev,
-			"Failed to initialize I2C controller: %d\n", ret);
-		return ret;
-	}
-
-	/* Setup I2C adapter with FBOSS BSP compliant naming */
-	i2c->adapter.owner = THIS_MODULE;
-	i2c->adapter.algo = &axi_iic_algorithm;
-	i2c->adapter.quirks = &axi_iic_quirks;
-	i2c->adapter.dev.parent = &aux_dev->dev;
-	i2c->adapter.dev.of_node = aux_dev->dev.of_node;
-	snprintf(i2c->adapter.name, sizeof(i2c->adapter.name),
-		 "FPGA %04x I2C Adapter #%u",
-		 fpga_aux_dev->parent->pdev->device, master_id);
-
-	i2c_set_adapdata(&i2c->adapter, i2c);
-
-	/* Register I2C adapter */
-	ret = devm_i2c_add_adapter(&aux_dev->dev, &i2c->adapter);
-	if (ret) {
-		dev_err(&aux_dev->dev, "Failed to add I2C adapter: %d\n", ret);
-		return ret;
-	}
-
-	/* Configure mux support based on platform data and CSR offset */
+	/* Resolve mux topology before the bus notifier fires (during pdev add). */
 	ret = configure_mux_support(i2c, fpga_aux_dev, aux_dev, master_id);
 	if (ret) {
 		dev_err(&aux_dev->dev, "Failed to configure mux support: %d\n",
@@ -276,29 +154,102 @@ int nh_fpga_i2c_probe(struct auxiliary_device *aux_dev,
 		return ret;
 	}
 
-	/* Create virtual mux devices for FBOSS discovery if mux is supported */
-	if (i2c->num_mux_channels > 0) {
-		ret = create_fpga_mux_devices(i2c, master_id);
-		if (ret) {
-			dev_err(&aux_dev->dev,
-				"Failed to create mux devices: %d\n", ret);
-			return ret;
-		}
-		dev_info(&aux_dev->dev,
-			 "Created I2C adapter with %d mux channels\n",
-			 i2c->num_mux_channels);
-	} else {
-		dev_info(&aux_dev->dev,
-			 "Created I2C adapter without mux support\n");
+	/* Resolve IRQ + ref-clk for this controller from the parent. */
+	ret = nh_fpga_resolve_master_irq_clk(fpga_aux_dev->parent,
+					     fpga_aux_dev->dev_info.csr_offset,
+					     &virq, &clk_hw);
+	if (ret) {
+		dev_err(&aux_dev->dev,
+			"Failed to resolve IRQ and clock for Master %d: %d\n",
+			master_id, ret);
+		return ret;
 	}
 
-	/* Store I2C controller in auxiliary device data */
+	/* Unique xiic-i2c pdev id from a plain counter: master_id collides
+	 * across FPGAs, and a csr-offset-derived index aliases the M4062 ext
+	 * masters onto existing ids (-EEXIST). */
+	pdev_id = atomic_inc_return(&nh_fpga_xiic_pdev_id);
+
+	/* clkdev alias on the child pdev name so i2c-xiic's clk_get finds it. */
+	i2c->cl = clkdev_hw_create(clk_hw, NULL, "xiic-i2c.%d", pdev_id);
+	if (!i2c->cl) {
+		dev_err(&aux_dev->dev,
+			"Failed to create clk_lookup for Master %d\n",
+			master_id);
+		return -ENOMEM;
+	}
+
+	/* Build MEM + IRQ resources for the child controller. */
+	mem_start = pci_resource_start(fpga_aux_dev->parent->pdev, 0) +
+		    fpga_aux_dev->dev_info.csr_offset;
+	mem_size = fpga_aux_dev->parent->irq_cfg->i2c_csr_channel_size;
+
+	struct resource res[] = {
+		DEFINE_RES_MEM(mem_start, mem_size),
+		DEFINE_RES_IRQ(virq),
+	};
+
+	/* alloc+add split so drvdata is set before the probe/notifier runs. */
+	i2c->pdev = platform_device_alloc("xiic-i2c", pdev_id);
+	if (!i2c->pdev) {
+		dev_err(&aux_dev->dev, "Failed to alloc xiic-i2c.%d\n",
+			pdev_id);
+		ret = -ENOMEM;
+		goto err_drop_clk;
+	}
+	i2c->pdev->dev.parent = &aux_dev->dev;
+
+	ret = platform_device_add_resources(i2c->pdev, res, ARRAY_SIZE(res));
+	if (ret) {
+		dev_err(&aux_dev->dev,
+			"Failed to add resources to xiic-i2c.%d: %d\n", pdev_id,
+			ret);
+		goto err_put_pdev;
+	}
+
+	/* clock-frequency for i2c-xiic via software node (it defaults to 100kHz). */
+	if (fpga_aux_dev->dev_info.i2c_data.bus_freq_hz) {
+		struct property_entry props[] = {
+			PROPERTY_ENTRY_U32(
+				"clock-frequency",
+				fpga_aux_dev->dev_info.i2c_data.bus_freq_hz),
+			{}
+		};
+
+		ret = device_create_managed_software_node(&i2c->pdev->dev,
+							  props, NULL);
+		if (ret) {
+			dev_err(&aux_dev->dev,
+				"Failed to attach clock-frequency property: %d\n",
+				ret);
+			goto err_put_pdev;
+		}
+	}
+
 	auxiliary_set_drvdata(aux_dev, i2c);
 
-	dev_info(&aux_dev->dev, "FPGA I2C controller registered as %s\n",
-		 i2c->adapter.name);
+	ret = platform_device_add(i2c->pdev);
+	if (ret) {
+		dev_err(&aux_dev->dev, "Failed to add xiic-i2c.%d: %d\n",
+			pdev_id, ret);
+		auxiliary_set_drvdata(aux_dev, NULL);
+		goto err_put_pdev;
+	}
+
+	dev_info(
+		&aux_dev->dev,
+		"Registered xiic-i2c.%d for master %d (mem=0x%llx+0x%llx, virq=%d)\n",
+		pdev_id, master_id, (u64)mem_start, (u64)mem_size, virq);
 
 	return 0;
+
+err_put_pdev:
+	platform_device_put(i2c->pdev);
+	i2c->pdev = NULL;
+err_drop_clk:
+	clkdev_drop(i2c->cl);
+	i2c->cl = NULL;
+	return ret;
 }
 
 /* Auxiliary device remove function */
@@ -311,17 +262,40 @@ void nh_fpga_i2c_remove(struct auxiliary_device *aux_dev)
 		return;
 	}
 
-	/* Remove mux client device if present - do this BEFORE adapter removal */
+	/* Drop the compat symlinks before their targets disappear. */
+	for (int i = 0; i < i2c->num_mux_channels; i++) {
+		char name[16];
+
+		snprintf(name, sizeof(name), "channel-%d", i);
+		sysfs_remove_link(&aux_dev->dev.kobj, name);
+	}
+	if (i2c->master_bus_num >= 0) {
+		char name[16];
+
+		snprintf(name, sizeof(name), "i2c-%d", i2c->master_bus_num);
+		sysfs_remove_link(&aux_dev->dev.kobj, name);
+		i2c->master_bus_num = -1;
+	}
+
+	/* Remove the mux client before the xiic pdev: its reference on the master
+	 * adapter would otherwise wedge i2c_del_adapter() and hang rmmod. */
 	if (i2c->mux_client) {
-		dev_info(&aux_dev->dev, "Removing mux client device\n");
 		i2c_unregister_device(i2c->mux_client);
 		i2c->mux_client = NULL;
 	}
 
-	/* Clear auxiliary device data to prevent further access */
+	if (i2c->pdev) {
+		platform_device_unregister(i2c->pdev);
+		i2c->pdev = NULL;
+	}
+
+	if (i2c->cl) {
+		clkdev_drop(i2c->cl);
+		i2c->cl = NULL;
+	}
+
 	auxiliary_set_drvdata(aux_dev, NULL);
 
-	/* With devm_i2c_add_adapter(), the adapter is automatically removed */
 	dev_info(&aux_dev->dev, "FPGA I2C controller removed\n");
 }
 
@@ -345,6 +319,121 @@ static struct auxiliary_driver nh_fpga_i2c_aux_driver = {
 	.id_table = nh_fpga_i2c_aux_id_table,
 };
 
+/* Walk up the device tree looking for a device bound to our aux driver.
+ * Returns the matching device, or NULL if none found within max_depth hops. */
+static struct device *nh_fpga_i2c_find_owning_aux(struct device *dev,
+						  int max_depth)
+{
+	for (int i = 0; i < max_depth && dev; i++) {
+		if (dev->driver == &nh_fpga_i2c_aux_driver.driver)
+			return dev;
+		dev = dev->parent;
+	}
+	return NULL;
+}
+
+/* Create i2c-N / channel-N compatibility symlinks under the aux device kobj
+ * so PlatformManager can discover the buses at the expected location */
+static void nh_fpga_i2c_add_compat_link(struct device *aux_kdev,
+					struct i2c_adapter *adap,
+					const char *link_name)
+{
+	int ret =
+		sysfs_create_link(&aux_kdev->kobj, &adap->dev.kobj, link_name);
+	if (ret && ret != -EEXIST)
+		dev_warn(aux_kdev, "Failed to create %s symlink: %d\n",
+			 link_name, ret);
+}
+
+/* i2c_bus_type notifier: renames our xiic master adapters, creates the compat
+ * symlinks, and instantiates the fpga-mux client. Handles both the master
+ * adapter and the mux channel adapters. */
+static int nh_fpga_i2c_bus_notify(struct notifier_block *nb,
+				  unsigned long action, void *data)
+{
+	struct device *dev = data;
+	struct i2c_adapter *adap;
+	struct device *aux_kdev;
+	struct auxiliary_device *aux_dev;
+	struct nh_fpga_aux_dev *fpga_aux_dev;
+	struct nh_fpga_i2c *i2c;
+	char link_name[16];
+
+	if (action != BUS_NOTIFY_ADD_DEVICE)
+		return NOTIFY_DONE;
+
+	adap = i2c_verify_adapter(dev);
+	if (!adap || !dev->parent)
+		return NOTIFY_DONE;
+
+	/* Case 1: master adapter (parent xiic-i2c pdev, grandparent aux dev). */
+	aux_kdev = nh_fpga_i2c_find_owning_aux(dev->parent->parent, 1);
+	if (aux_kdev) {
+		aux_dev = container_of(aux_kdev, struct auxiliary_device, dev);
+		fpga_aux_dev =
+			container_of(aux_dev, struct nh_fpga_aux_dev, aux_dev);
+		i2c = auxiliary_get_drvdata(aux_dev);
+
+		if (!i2c || i2c->pdev != to_platform_device(dev->parent))
+			return NOTIFY_DONE;
+
+		snprintf(adap->name, sizeof(adap->name),
+			 "FPGA %s I2C Adapter #%d",
+			 pci_name(fpga_aux_dev->parent->pdev),
+			 fpga_aux_dev->dev_info.id.id);
+
+		snprintf(link_name, sizeof(link_name), "i2c-%d", adap->nr);
+		nh_fpga_i2c_add_compat_link(aux_kdev, adap, link_name);
+		i2c->master_bus_num = adap->nr;
+
+		/* Instantiate the fpga-mux client at 0x71 (a register-mapped
+		 * pseudo-address) when this master has a mux. */
+		if (i2c->num_mux_channels > 0 && !i2c->mux_client) {
+			struct i2c_board_info info = {
+				I2C_BOARD_INFO("fpga-mux", 0x71),
+				.platform_data = &i2c->mux_pdata,
+			};
+
+			i2c->mux_client = i2c_new_client_device(adap, &info);
+			if (IS_ERR(i2c->mux_client)) {
+				dev_warn(
+					&aux_dev->dev,
+					"Failed to instantiate FPGA mux: %ld\n",
+					PTR_ERR(i2c->mux_client));
+				i2c->mux_client = NULL;
+			}
+		}
+
+		return NOTIFY_OK;
+	}
+
+	/* Case 2: mux channel adapter (walk up to our aux device). */
+	aux_kdev = nh_fpga_i2c_find_owning_aux(dev->parent, 4);
+	if (aux_kdev) {
+		int chan_id;
+
+		aux_dev = container_of(aux_kdev, struct auxiliary_device, dev);
+		i2c = auxiliary_get_drvdata(aux_dev);
+		if (!i2c)
+			return NOTIFY_DONE;
+
+		/* Parse chan_id from the i2c-mux core's "i2c-M-mux (chan_id K)" name. */
+		if (sscanf(adap->name, "i2c-%*d-mux (chan_id %d)", &chan_id) !=
+		    1)
+			return NOTIFY_DONE;
+
+		snprintf(link_name, sizeof(link_name), "channel-%d", chan_id);
+		nh_fpga_i2c_add_compat_link(aux_kdev, adap, link_name);
+		return NOTIFY_OK;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block nh_fpga_i2c_nb = {
+	.notifier_call = nh_fpga_i2c_bus_notify,
+};
+
 /* Module initialization */
 static int __init nh_fpga_i2c_init_module(void)
 {
@@ -352,9 +441,16 @@ static int __init nh_fpga_i2c_init_module(void)
 
 	pr_info("NH FPGA I2C driver v%s loading\n", DRIVER_VERSION);
 
+	ret = bus_register_notifier(&i2c_bus_type, &nh_fpga_i2c_nb);
+	if (ret) {
+		pr_err("Failed to register i2c bus notifier: %d\n", ret);
+		return ret;
+	}
+
 	ret = auxiliary_driver_register(&nh_fpga_i2c_aux_driver);
 	if (ret) {
 		pr_err("Failed to register auxiliary driver: %d\n", ret);
+		bus_unregister_notifier(&i2c_bus_type, &nh_fpga_i2c_nb);
 		return ret;
 	}
 
@@ -367,6 +463,7 @@ static void __exit nh_fpga_i2c_exit_module(void)
 {
 	pr_info("NH FPGA I2C driver unloading\n");
 	auxiliary_driver_unregister(&nh_fpga_i2c_aux_driver);
+	bus_unregister_notifier(&i2c_bus_type, &nh_fpga_i2c_nb);
 	pr_info("NH FPGA I2C driver unloaded\n");
 }
 
@@ -377,3 +474,4 @@ MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Arif Mohammad <marif@nexthop.ai>");
 MODULE_DESCRIPTION("Nexthop FPGA I2C Controller Driver");
 MODULE_VERSION(DRIVER_VERSION);
+MODULE_SOFTDEP("pre: i2c-xiic nh_fpga_mux");
