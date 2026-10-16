@@ -16,6 +16,31 @@ struct nh_platform_cfg; /* forward declaration */
 #define NH_FPGA_PSU_OFFSET_UNSET 0xFFFFFFFFU
 
 /*
+ * Firmware-version read for PSUs sitting behind the FPGA I2C mux.
+ *
+ * The transfer goes through the mux child adapter registered by nh_fpga_mux,
+ * so the channel select and bus locking are handled by the i2c.
+ *
+ * logical_master: index of the parent I2C master within the FPGA's I2C CSR
+ *   block.
+ * mux_channels: per-PSU mux channel, indexed by PSU slot. Must have
+ *   psu_present_cfg.num_psus entries.
+ * device_addr: PMBus slave address.
+ * version_reg: PMBus FW revision register.
+ * read_len: total bytes to read from version_reg.
+ * payload_offset: index of the first version byte. Set to 1 for devices that
+ *   answer with an SMBus-block-style leading byte count.
+ */
+struct psu_fw_cfg {
+	u8 logical_master;
+	const u8 *mux_channels;
+	u16 device_addr;
+	u8 version_reg;
+	u8 read_len;
+	u8 payload_offset;
+};
+
+/*
  * Per-platform layout of the PSU-present register.
  *
  * A single 32-bit register within the aux device's CSR block carries one
@@ -34,6 +59,7 @@ struct psu_present_cfg {
 	u8 num_psus;
 	bool active_low;
 	const u32 *present_masks;
+	const struct psu_fw_cfg *fw_cfg;
 };
 
 #endif /* _NH_FPGA_PSU_H_ */

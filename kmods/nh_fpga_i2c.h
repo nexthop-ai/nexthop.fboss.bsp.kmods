@@ -18,6 +18,7 @@ struct nh_fpga_i2c {
 	struct i2c_client *mux_client; /* Virtual mux client device */
 	void __iomem *mux_reg; /* FPGA mux control register */
 	int num_mux_channels; /* Number of mux channels */
+	int logical_master; /* Position in the FPGA's I2C CSR block */
 };
 
 /* Function prototypes */

@@ -8,6 +8,9 @@
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/sysfs.h>
+#include <linux/list.h>
+#include <linux/mutex.h>
+#include <linux/pci.h>
 #include "nh_fpga_i2c_mux.h"
 
 #define DRIVER_NAME "nh_fpga_mux"
@@ -18,7 +21,46 @@ struct fpga_mux {
 	struct i2c_mux_core *muxc;
 	void __iomem *mux_reg;
 	int num_channels;
+	struct pci_dev *pdev;
+	u8 logical_master;
+	struct list_head node;
 };
+
+/*
+ * Registered muxes, so sibling BSP drivers can reach a channel by (FPGA,
+ * logical master) rather than by adapter name.
+ *
+ * The lock is held across the transfer in nh_fpga_mux_channel_xfer(): remove()
+ * unlinks before it deletes the adapters, so an entry still on the list is
+ * guaranteed to have live ones. Handing out a reference instead would mean
+ * calling i2c_get_adapter() (which takes the i2c core lock) under this lock,
+ * while remove() can itself run with the core lock already held.
+ */
+static LIST_HEAD(fpga_mux_list);
+static DEFINE_MUTEX(fpga_mux_list_lock);
+
+int nh_fpga_mux_channel_xfer(struct pci_dev *pdev, u8 logical_master,
+			     u8 channel, struct i2c_msg *msgs, int num)
+{
+	struct fpga_mux *mux;
+	int ret = -ENODEV;
+
+	mutex_lock(&fpga_mux_list_lock);
+	list_for_each_entry(mux, &fpga_mux_list, node) {
+		if (mux->pdev != pdev || mux->logical_master != logical_master)
+			continue;
+
+		if (channel < mux->muxc->num_adapters &&
+		    mux->muxc->adapter[channel])
+			ret = i2c_transfer(mux->muxc->adapter[channel], msgs,
+					   num);
+		break;
+	}
+	mutex_unlock(&fpga_mux_list_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(nh_fpga_mux_channel_xfer);
 
 /* Mux select function - writes to FPGA register */
 static int fpga_mux_select(struct i2c_mux_core *muxc, u32 chan)
@@ -71,6 +113,8 @@ static int fpga_mux_probe(struct i2c_client *client)
 
 	mux->mux_reg = pdata->mux_reg;
 	mux->num_channels = pdata->num_channels;
+	mux->pdev = pdata->pdev;
+	mux->logical_master = pdata->logical_master;
 
 	/* Create mux core - this creates the sysfs structure FBOSS expects */
 	mux->muxc = i2c_mux_alloc(client->adapter, &client->dev,
@@ -142,6 +186,11 @@ static int fpga_mux_probe(struct i2c_client *client)
 
 	i2c_set_clientdata(client, mux);
 
+	/* Publish only once every channel adapter exists. */
+	mutex_lock(&fpga_mux_list_lock);
+	list_add_tail(&mux->node, &fpga_mux_list);
+	mutex_unlock(&fpga_mux_list_lock);
+
 	dev_info(&client->dev,
 		 "FPGA mux with %d channels registered at 0x%02x\n",
 		 pdata->num_channels, client->addr);
@@ -163,6 +212,12 @@ static void fpga_mux_remove(struct i2c_client *client)
 	if (!mux) {
 		return;
 	}
+
+	/* Unlink before the adapters go away, so a concurrent lookup cannot
+	 * hand out a channel that is being torn down. */
+	mutex_lock(&fpga_mux_list_lock);
+	list_del(&mux->node);
+	mutex_unlock(&fpga_mux_list_lock);
 
 	/* Clear client data first to prevent further access */
 	i2c_set_clientdata(client, NULL);

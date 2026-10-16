@@ -4,47 +4,144 @@
 #include <linux/module.h>
 #include <linux/auxiliary_bus.h>
 #include <linux/sysfs.h>
+#include <linux/i2c.h>
 #include <linux/io.h>
 #include <linux/pci.h>
 #include <linux/hwmon.h>
 #include "nh_fpga_fbiob.h"
+#include "nh_fpga_i2c_mux.h"
 #include "nh_fpga_psu.h"
 #include "platform/nh_platform.h"
 
 #define DRIVER_NAME "nh_fpga_psu"
 #define DRIVER_VERSION "0.1"
 
+/* Bounds the on-stack read buffer; platform read_len is checked against it. */
+#define PSU_FW_MAX_READ_LEN 8
+
+/* Version is major.minor_primary.minor_secondary, one byte each. */
+#define PSU_FW_VERSION_BYTES 3
+
 struct nh_fpga_psu {
 	struct auxiliary_device *aux_dev;
 	struct device *hwmon_dev;
 	void __iomem *base;
+	struct pci_dev *pdev;
 	const struct psu_present_cfg *cfg;
 	/* Per-PSU attrs are allocated via devm at probe time, sized to
-	 * cfg->num_psus. No static cap array needed. */
+	 * cfg->num_psus.
+	 * No static cap array needed.
+	 */
 	struct attribute_group group;
 	const struct attribute_group *groups[2];
 };
+
+static int psu_attr_to_index(const char *name)
+{
+	int psu_num;
+
+	if (sscanf(name, "psu%d", &psu_num) != 1)
+		return -EINVAL;
+	return psu_num - 1;
+}
+
+static bool nh_fpga_psu_is_present(struct nh_fpga_psu *p, int idx)
+{
+	u32 reg = ioread32(p->base + p->cfg->present_reg_offset);
+	bool present = !!(reg & p->cfg->present_masks[idx]);
+
+	return p->cfg->active_low ? !present : present;
+}
+
+/*
+ * The PSU lives on a mux child adapter registered by nh_fpga_mux, which handles
+ * the channel select and bus locking.
+ */
+static int nh_fpga_psu_read_fw_raw(struct nh_fpga_psu *p, int idx, u8 *raw)
+{
+	const struct psu_fw_cfg *fw = p->cfg->fw_cfg;
+	u8 cmd = fw->version_reg;
+	struct i2c_msg msgs[] = {
+		{
+			.addr = fw->device_addr,
+			.flags = 0,
+			.len = 1,
+			.buf = &cmd,
+		},
+		{
+			.addr = fw->device_addr,
+			.flags = I2C_M_RD,
+			.len = fw->read_len,
+			.buf = raw,
+		},
+	};
+	int ret;
+
+	ret = nh_fpga_mux_channel_xfer(p->pdev, fw->logical_master,
+				       fw->mux_channels[idx], msgs,
+				       ARRAY_SIZE(msgs));
+
+	return ret == ARRAY_SIZE(msgs) ? 0 : (ret < 0 ? ret : -EIO);
+}
 
 static ssize_t psu_present_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct nh_fpga_psu *p = dev_get_drvdata(dev);
-	int psu_num;
-	u32 reg;
-	bool present;
+	int idx;
 
-	/* Extract PSU number from attribute name "psu<N>_present" */
-	if (sscanf(attr->attr.name, "psu%d_present", &psu_num) != 1 ||
-	    psu_num < 1 || psu_num > p->cfg->num_psus)
+	idx = psu_attr_to_index(attr->attr.name);
+	if (idx < 0 || idx >= p->cfg->num_psus)
 		return -EINVAL;
 
-	reg = ioread32(p->base + p->cfg->present_reg_offset);
-	present = !!(reg & p->cfg->present_masks[psu_num - 1]);
-	if (p->cfg->active_low)
-		present = !present;
-
 	/* 1 for present, 0 for absent (FBOSS convention) */
-	return sysfs_emit(buf, "%d\n", present ? 1 : 0);
+	return sysfs_emit(buf, "%d\n", nh_fpga_psu_is_present(p, idx) ? 1 : 0);
+}
+
+static ssize_t psu_fw_version_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct nh_fpga_psu *p = dev_get_drvdata(dev);
+	u8 raw[PSU_FW_MAX_READ_LEN] = { 0 };
+	const u8 *ver;
+	int idx, ret;
+
+	idx = psu_attr_to_index(attr->attr.name);
+	if (idx < 0 || idx >= p->cfg->num_psus)
+		return -EINVAL;
+
+	/*
+	 * An empty slot is normal, and fw_util turns any failed version read
+	 * into a failure of the whole run, so report a sentinel rather than
+	 * an errno.
+	 */
+	if (!nh_fpga_psu_is_present(p, idx))
+		return sysfs_emit(buf, "n/a\n");
+
+	ret = nh_fpga_psu_read_fw_raw(p, idx, raw);
+	if (ret)
+		return ret;
+
+	ver = raw + p->cfg->fw_cfg->payload_offset;
+	return sysfs_emit(buf, "%u.%u.%u\n", ver[2] & 0x7f, ver[1], ver[0]);
+}
+
+static int nh_fpga_psu_check_fw_cfg(struct device *dev,
+				    const struct psu_fw_cfg *fw)
+{
+	if (!fw->mux_channels) {
+		dev_err(dev, "PSU FW config has no mux channel map\n");
+		return -EINVAL;
+	}
+
+	if (fw->read_len > PSU_FW_MAX_READ_LEN ||
+	    fw->read_len < fw->payload_offset + PSU_FW_VERSION_BYTES) {
+		dev_err(dev, "PSU FW config read_len %u out of range\n",
+			fw->read_len);
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static int nh_fpga_psu_probe(struct auxiliary_device *aux_dev,
@@ -54,7 +151,7 @@ static int nh_fpga_psu_probe(struct auxiliary_device *aux_dev,
 	const struct nh_platform_cfg *platform_cfg;
 	struct nh_fpga_psu *p;
 	u16 device_id;
-	int i;
+	int i, ret;
 
 	fpga_aux_dev = container_of(aux_dev, struct nh_fpga_aux_dev, aux_dev);
 	device_id = fpga_aux_dev->parent->pdev->device;
@@ -82,6 +179,7 @@ static int nh_fpga_psu_probe(struct auxiliary_device *aux_dev,
 
 	p->aux_dev = aux_dev;
 	p->base = fpga_aux_dev->csr_base;
+	p->pdev = fpga_aux_dev->parent->pdev;
 	p->cfg = platform_cfg->psu_present_cfg;
 
 	if (p->cfg->num_psus == 0) {
@@ -89,31 +187,55 @@ static int nh_fpga_psu_probe(struct auxiliary_device *aux_dev,
 		return -EINVAL;
 	}
 
+	if (p->cfg->fw_cfg) {
+		ret = nh_fpga_psu_check_fw_cfg(&aux_dev->dev, p->cfg->fw_cfg);
+		if (ret)
+			return ret;
+	}
+
 	/* Build per-PSU attrs dynamically, no static cap array needed.
 	 * All allocations are devm. */
 	{
 		struct device_attribute *attrs;
 		struct attribute **attr_ptrs;
+		int attrs_per_psu = p->cfg->fw_cfg ? 2 : 1;
+		int num_attrs = p->cfg->num_psus * attrs_per_psu;
+		int attr_idx = 0;
 
-		attrs = devm_kcalloc(&aux_dev->dev, p->cfg->num_psus,
-				     sizeof(*attrs), GFP_KERNEL);
-		attr_ptrs = devm_kcalloc(&aux_dev->dev, p->cfg->num_psus + 1,
+		attrs = devm_kcalloc(&aux_dev->dev, num_attrs, sizeof(*attrs),
+				     GFP_KERNEL);
+		attr_ptrs = devm_kcalloc(&aux_dev->dev, num_attrs + 1,
 					 sizeof(*attr_ptrs), GFP_KERNEL);
 		if (!attrs || !attr_ptrs)
 			return -ENOMEM;
 
 		for (i = 0; i < p->cfg->num_psus; i++) {
-			attrs[i].attr.name =
+			attrs[attr_idx].attr.name =
 				devm_kasprintf(&aux_dev->dev, GFP_KERNEL,
 					       "psu%d_present", i + 1);
-			if (!attrs[i].attr.name)
+			if (!attrs[attr_idx].attr.name)
 				return -ENOMEM;
-			sysfs_attr_init(&attrs[i].attr);
-			attrs[i].attr.mode = 0444;
-			attrs[i].show = psu_present_show;
-			attr_ptrs[i] = &attrs[i].attr;
+			sysfs_attr_init(&attrs[attr_idx].attr);
+			attrs[attr_idx].attr.mode = 0444;
+			attrs[attr_idx].show = psu_present_show;
+			attr_ptrs[attr_idx] = &attrs[attr_idx].attr;
+			attr_idx++;
+
+			if (!p->cfg->fw_cfg)
+				continue;
+
+			attrs[attr_idx].attr.name =
+				devm_kasprintf(&aux_dev->dev, GFP_KERNEL,
+					       "psu%d_fw_version", i + 1);
+			if (!attrs[attr_idx].attr.name)
+				return -ENOMEM;
+			sysfs_attr_init(&attrs[attr_idx].attr);
+			attrs[attr_idx].attr.mode = 0444;
+			attrs[attr_idx].show = psu_fw_version_show;
+			attr_ptrs[attr_idx] = &attrs[attr_idx].attr;
+			attr_idx++;
 		}
-		attr_ptrs[p->cfg->num_psus] = NULL;
+		attr_ptrs[attr_idx] = NULL;
 		p->group.attrs = attr_ptrs;
 	}
 	p->groups[0] = &p->group;
@@ -134,8 +256,8 @@ static int nh_fpga_psu_probe(struct auxiliary_device *aux_dev,
 	}
 
 	dev_info(&aux_dev->dev,
-		 "NH FPGA PSU presence driver registered (%u PSUs)\n",
-		 p->cfg->num_psus);
+		 "NH FPGA PSU driver registered (%u PSUs, fw version %s)\n",
+		 p->cfg->num_psus, p->cfg->fw_cfg ? "enabled" : "disabled");
 	return 0;
 }
 
