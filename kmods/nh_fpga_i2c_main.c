@@ -73,6 +73,7 @@ static int configure_mux_support(struct nh_fpga_i2c *i2c,
 	}
 	logical_master = (csr_offset - NH_FPGA_I2C_BLOCK_BASE) /
 			 NH_FPGA_I2C_MASTER_STRIDE;
+	i2c->logical_master = logical_master;
 
 	platform_cfg = nh_get_platform(device_id);
 	if (!platform_cfg) {
@@ -158,6 +159,8 @@ static const struct i2c_adapter_quirks axi_iic_quirks = {
 /* Create virtual I2C mux devices for FBOSS discovery */
 static int create_fpga_mux_devices(struct nh_fpga_i2c *i2c, int master_id)
 {
+	struct nh_fpga_aux_dev *fpga_aux_dev =
+		container_of(i2c->aux_dev, struct nh_fpga_aux_dev, aux_dev);
 	struct i2c_board_info mux_info;
 	struct i2c_client *mux_client;
 	struct fpga_mux_platform_data *pdata;
@@ -179,6 +182,10 @@ static int create_fpga_mux_devices(struct nh_fpga_i2c *i2c, int master_id)
 
 	pdata->mux_reg = i2c->mux_reg;
 	pdata->num_channels = i2c->num_mux_channels;
+	/* Lets sibling drivers address a channel without parsing the adapter
+	 * name, whose "#N" is a dynamically assigned auxiliary device id. */
+	pdata->pdev = fpga_aux_dev->parent->pdev;
+	pdata->logical_master = i2c->logical_master;
 	mux_info.platform_data = pdata;
 
 	mux_client = i2c_new_client_device(&i2c->adapter, &mux_info);

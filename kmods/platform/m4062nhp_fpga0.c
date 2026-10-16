@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Nexthop Systems Inc.
 
 #include <linux/bits.h>
+#include <linux/build_bug.h>
 #include <linux/types.h>
 #include "nh_platform.h"
 #include "m4062nhp_common.h"
@@ -184,11 +185,39 @@ static const u32 m4062nhp_fpga0_psu_masks[] = {
 	BIT(5), /* PSU4 */
 };
 
+/*
+ * PSU firmware version. Each PSU hangs off its own channel of the PSU mux.
+ *
+ * MFR_FW_REVISION is block-formatted: a leading byte count, then
+ * [minor_secondary, minor_primary, major]. Read the whole block and skip the
+ * count rather than truncating mid-block.
+ */
+static const u8 m4062nhp_fpga0_psu_fw_mux_channels[] = {
+	0, /* PSU1 */
+	1, /* PSU2 */
+	2, /* PSU3 */
+	3, /* PSU4 */
+};
+
+static_assert(ARRAY_SIZE(m4062nhp_fpga0_psu_fw_mux_channels) ==
+		      ARRAY_SIZE(m4062nhp_fpga0_psu_masks),
+	      "one mux channel per PSU slot");
+
+static const struct psu_fw_cfg m4062nhp_fpga0_psu_fw = {
+	.logical_master = 0,
+	.mux_channels = m4062nhp_fpga0_psu_fw_mux_channels,
+	.device_addr = 0x58,
+	.version_reg = 0xD9,
+	.read_len = 8,
+	.payload_offset = 1,
+};
+
 static const struct psu_present_cfg m4062nhp_fpga0_psu = {
 	.present_reg_offset = 0x00,
 	.num_psus = ARRAY_SIZE(m4062nhp_fpga0_psu_masks),
 	.active_low = true,
 	.present_masks = m4062nhp_fpga0_psu_masks,
+	.fw_cfg = &m4062nhp_fpga0_psu_fw,
 };
 
 /* ============================================================================
