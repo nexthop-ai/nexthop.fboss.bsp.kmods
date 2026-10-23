@@ -1,0 +1,15 @@
+Backported drivers
+==================
+
+Copies of upstream kernel drivers that the BSP ships instead of the kernel's
+own build, because the BSP needs fixes the FBOSS kernel does not carry.
+
+Files and modules are prefixed "bp4f_" (backport for FBOSS), and each driver
+registers under a "bp4f-" name, so neither the module nor the driver collides
+with the kernel's version when both are installed.
+
+bp4f_i2c_xiic.c: Linux v6.11.11 drivers/i2c/busses/i2c-xiic.c plus upstream
+b7e6df2f52ed and 840d8acc8792 (SMBus block-read fixes) and the RX FIFO fix
+posted to linux-i2c ("i2c: xiic: don't fail a read whose data is already in
+the RX FIFO"). The header of the file lists exactly what is applied. Mirror
+any new FBOSS kernel xiic patch here.

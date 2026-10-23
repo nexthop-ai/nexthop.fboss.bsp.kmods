@@ -19,7 +19,7 @@
 #define FAN_CARD_TYPE_RAPTOR_2RU_12V 0x1
 
 /* Tachometer time units (in nanoseconds for integer arithmetic) */
-#define FAN_TACH_TIME_UNIT_NS 3920 /* All fans: 3.92us = 3920ns */
+#define FAN_TACH_TIME_UNIT_NS 3920 /* default tick: 3.92us = 3920ns */
 
 /* PWM scaling constants */
 #define FAN_PWM_MIN 0
@@ -109,6 +109,8 @@ struct fan_card_status_addr {
 	u32 pwm_mask;
 	u32 inner_tach_mask;
 	u32 outer_tach_mask;
+	/* Tach tick period in ns; 0 selects FAN_TACH_TIME_UNIT_NS. */
+	u32 tach_time_unit_ns;
 
 	/* Tachometers per fan tray: 1 (inner only) or 2 (inner + outer). A
 	 * tray's rotors occupy consecutive hwmon fan channels, inner first,
@@ -124,6 +126,6 @@ struct fan_card_status_addr {
 int nh_fpga_fan_get_status(struct nh_fpga_fan_controller *controller,
 			   int channel, struct fan_status *status);
 int nh_fpga_fan_get_card_type(struct nh_fpga_fan_controller *controller);
-u32 nh_fpga_fan_tach_to_rpm(u32 tach_cycles);
+u32 nh_fpga_fan_tach_to_rpm(u32 tach_cycles, u32 tach_time_unit_ns);
 
 #endif /* _NH_FPGA_FAN_H_ */

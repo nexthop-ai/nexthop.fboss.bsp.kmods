@@ -13,7 +13,10 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/list.h>
 #include <linux/delay.h>
+#include <linux/io.h>
+#include <linux/clk-provider.h>
 #include "nh_fpga_fbiob.h"
+#include "nh_fpga_irq.h"
 #include "platform/nh_platform.h"
 
 #define DRIVER_NAME "fbiob_pci"
@@ -21,6 +24,15 @@
 
 #define FBIOB_MAJOR 0 /* Dynamic allocation */
 #define FBIOB_MAX_DEVICES 16
+
+/* FPGA revision register at BAR0+0:
+ *
+ *   [31:16] major revision — fixed per board, acts as a FPGA ID
+ *   [15:0]  minor revision — this is the version that actually changes
+ *
+ */
+#define NH_FPGA_VERSION_REG_OFFSET 0x0000
+#define NH_FPGA_VERSION_MASK 0xFFFF
 
 static dev_t fbiob_devt;
 static struct class *nh_fpga_class;
@@ -150,6 +162,97 @@ static void nh_fpga_put_minor(int minor)
 	}
 }
 
+/* devres frees the vectors after the regmap-irq chips' free_irq. */
+static void nh_fpga_pci_free_irq_vectors(void *data)
+{
+	pci_free_irq_vectors(data);
+}
+
+/* devres unmaps BAR0. */
+static void nh_fpga_pci_iounmap(void *data)
+{
+	struct nh_fpga_pci_dev *fbiob_dev = data;
+
+	pci_iounmap(fbiob_dev->pdev, fbiob_dev->mmio_base);
+}
+
+/* Set up MSI vectors, regmap-irq chips, and the I2C reference clock.
+ * Returns 0 when interrupt-driven I2C is ready or was intentionally skipped
+ * (no platform irq_cfg, or bitstream too old). Returns a negative errno on
+ * setup failure. */
+static int nh_fpga_setup_i2c_interrupts(struct nh_fpga_pci_dev *fbiob_dev,
+					struct pci_dev *pdev)
+{
+	const struct nh_platform_cfg *platform_cfg =
+		nh_get_platform(pdev->device);
+	const struct nh_fpga_irq_cfg *irq_cfg =
+		platform_cfg ? platform_cfg->irq_cfg : NULL;
+	const char *clk_name;
+	u32 fpga_base_fn;
+	u32 min_base_fn;
+	int ret;
+
+	if (!irq_cfg)
+		return 0;
+
+	min_base_fn = irq_cfg->min_fpga_version & NH_FPGA_VERSION_MASK;
+	fpga_base_fn =
+		ioread32(fbiob_dev->mmio_base + NH_FPGA_VERSION_REG_OFFSET) &
+		NH_FPGA_VERSION_MASK;
+
+	if (min_base_fn && fpga_base_fn < min_base_fn) {
+		dev_info(
+			&pdev->dev,
+			"FPGA base-function version 0x%04x older than 0x%04x required for interrupt-driven I2C; flash a newer bitstream. I2C disabled\n",
+			fpga_base_fn, min_base_fn);
+		return 0;
+	}
+
+	fbiob_dev->irq_cfg = irq_cfg;
+
+	ret = pci_alloc_irq_vectors(pdev, irq_cfg->num_domains,
+				    irq_cfg->num_domains, PCI_IRQ_MSI);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Failed to allocate %d MSI vectors: %d\n",
+			irq_cfg->num_domains, ret);
+		return ret;
+	}
+	dev_info(&pdev->dev, "Allocated %d MSI vectors\n", ret);
+
+	ret = devm_add_action_or_reset(&pdev->dev, nh_fpga_pci_free_irq_vectors,
+				       pdev);
+	if (ret)
+		return ret;
+
+	ret = nh_fpga_irq_init(fbiob_dev);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to initialize IRQs: %d\n", ret);
+		return ret;
+	}
+
+	clk_name = devm_kasprintf(&pdev->dev, GFP_KERNEL, "%s-refclk",
+				  pci_name(pdev));
+	if (!clk_name)
+		return -ENOMEM;
+
+	/* TODO: Remove this clock once bp4f_i2c_xiic carries upstream "i2c: xiic:
+	 * skip input clock setup on non-OF systems":
+	 * https://lore.kernel.org/all/20260223-i2c-xiic-v12-7-b6c9ce4e4f3c@nexthop.ai/ */
+
+	fbiob_dev->ref_clk_hw = devm_clk_hw_register_fixed_rate(
+		&pdev->dev, clk_name, NULL, 0, irq_cfg->ref_clk_hz);
+	if (IS_ERR(fbiob_dev->ref_clk_hw)) {
+		ret = PTR_ERR(fbiob_dev->ref_clk_hw);
+		dev_err(&pdev->dev, "Failed to register reference clock: %d\n",
+			ret);
+		return ret;
+	}
+	dev_info(&pdev->dev, "Registered reference clock at %u Hz\n",
+		 irq_cfg->ref_clk_hz);
+
+	return 0;
+}
+
 /* PCIe probe function */
 static int nh_fpga_pci_probe(struct pci_dev *pdev,
 			     const struct pci_device_id *id)
@@ -177,6 +280,7 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 	fbiob_dev->minor = minor;
 	fbiob_dev->pdev = pdev;
 	mutex_init(&fbiob_dev->lock);
+	mutex_init(&fbiob_dev->led_reg_lock);
 
 	/* Enable PCIe device */
 	ret = pci_enable_device(pdev);
@@ -185,13 +289,10 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 		goto err_put_minor;
 	}
 
-	/* Request memory regions */
-	ret = pci_request_regions(pdev, DRIVER_NAME);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to request PCIe regions: %d\n",
-			ret);
-		goto err_disable_device;
-	}
+	/*
+	 * No pci_request_regions(): the child bp4f-xiic-i2c devices claim BAR0
+	 * sub-regions, which would hit -EBUSY if the parent reserved the BAR.
+	 */
 
 	/* Map MMIO region */
 	fbiob_dev->mmio_len = pci_resource_len(pdev, 0);
@@ -199,8 +300,15 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 	if (!fbiob_dev->mmio_base) {
 		dev_err(&pdev->dev, "Failed to map MMIO region\n");
 		ret = -ENOMEM;
-		goto err_release_regions;
+		goto err_disable_device;
 	}
+
+	/* Hand the BAR mapping to devres so it outlives the devm-managed
+	 * regmap/irq chips that access it during teardown. */
+	ret = devm_add_action_or_reset(&pdev->dev, nh_fpga_pci_iounmap,
+				       fbiob_dev);
+	if (ret)
+		goto err_disable_device;
 
 	/* Set up DMA */
 	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
@@ -208,11 +316,15 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 		ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
 		if (ret) {
 			dev_err(&pdev->dev, "Failed to set DMA mask\n");
-			goto err_unmap;
+			goto err_disable_device;
 		}
 	}
 
 	pci_set_master(pdev);
+
+	ret = nh_fpga_setup_i2c_interrupts(fbiob_dev, pdev);
+	if (ret)
+		goto err_disable_device;
 
 	/* Initialize the auxiliary device list before the character device
 	 * goes live; an early ioctl must not walk an uninitialized list. */
@@ -226,7 +338,7 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to add character device: %d\n",
 			ret);
-		goto err_unmap;
+		goto err_disable_device;
 	}
 
 	/* Create device node */
@@ -254,10 +366,6 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 
 err_del_cdev:
 	cdev_del(&fbiob_dev->cdev);
-err_unmap:
-	pci_iounmap(pdev, fbiob_dev->mmio_base);
-err_release_regions:
-	pci_release_regions(pdev);
 err_disable_device:
 	pci_disable_device(pdev);
 err_put_minor:
@@ -308,12 +416,8 @@ static void nh_fpga_pci_remove(struct pci_dev *pdev)
 	if (fbiob_dev->cdev.owner)
 		cdev_del(&fbiob_dev->cdev);
 
-	/* Unmap MMIO region */
-	if (fbiob_dev->mmio_base)
-		pci_iounmap(pdev, fbiob_dev->mmio_base);
-
-	/* Release PCIe resources */
-	pci_release_regions(pdev);
+	/* BAR unmap and MSI vector free are devres-managed, so they run after
+	 * the regmap/irq chips' teardown once this function returns. */
 	pci_disable_device(pdev);
 
 	/* Release minor number last */

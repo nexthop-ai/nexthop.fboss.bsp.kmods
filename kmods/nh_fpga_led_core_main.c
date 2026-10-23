@@ -18,9 +18,8 @@
 #define DRIVER_NAME "nh_fpga_led"
 #define DRIVER_VERSION "1.0.0"
 
-/* PSU, FAN and SYS LEDs are separate auxiliary devices but share one
- * control register, so RMW must be serialized across all of them. */
-static DEFINE_MUTEX(nh_led_reg_lock);
+/* PSU, FAN and SYS LEDs share one control register, possibly with
+ * nh_fpga_port_led: RMW is serialized by the parent FPGA's led_reg_lock. */
 
 /* ============================================================================
  * LED Control Functions
@@ -41,10 +40,10 @@ static enum led_brightness nh_led_brightness_get(struct led_classdev *led_cdev)
 
 	mask = (1 << info->color_field_width) - 1;
 
-	mutex_lock(&nh_led_reg_lock);
+	mutex_lock(ctrl->reg_lock);
 	reg_val = ioread32(ctrl->base +
 			   ctrl->platform_cfg->led_core_cfg->control_offset);
-	mutex_unlock(&nh_led_reg_lock);
+	mutex_unlock(ctrl->reg_lock);
 
 	return (enum led_brightness)((reg_val >> info->color_offset) & mask);
 }
@@ -65,7 +64,7 @@ static int nh_led_brightness_set(struct led_classdev *led_cdev,
 
 	mask = (1 << info->color_field_width) - 1;
 
-	mutex_lock(&nh_led_reg_lock);
+	mutex_lock(ctrl->reg_lock);
 
 	reg_val = ioread32(ctrl->base +
 			   ctrl->platform_cfg->led_core_cfg->control_offset);
@@ -78,7 +77,7 @@ static int nh_led_brightness_set(struct led_classdev *led_cdev,
 		  ctrl->base +
 			  ctrl->platform_cfg->led_core_cfg->control_offset);
 
-	mutex_unlock(&nh_led_reg_lock);
+	mutex_unlock(ctrl->reg_lock);
 
 	dev_dbg(&ctrl->aux_dev->dev,
 		"LED %s: brightness=%d, reg=0x%08x->0x%08x\n", led_cdev->name,
@@ -102,7 +101,7 @@ static int nh_led_blink_set(struct led_classdev *led_cdev,
 	u32 reg_val, new_reg_val;
 	bool blink_enable = (*delay_on != 0 || *delay_off != 0);
 
-	mutex_lock(&nh_led_reg_lock);
+	mutex_lock(ctrl->reg_lock);
 
 	reg_val = ioread32(ctrl->base +
 			   ctrl->platform_cfg->led_core_cfg->control_offset);
@@ -117,7 +116,7 @@ static int nh_led_blink_set(struct led_classdev *led_cdev,
 		  ctrl->base +
 			  ctrl->platform_cfg->led_core_cfg->control_offset);
 
-	mutex_unlock(&nh_led_reg_lock);
+	mutex_unlock(ctrl->reg_lock);
 
 	dev_dbg(&ctrl->aux_dev->dev, "LED %s: blink=%s, reg=0x%08x->0x%08x\n",
 		led_cdev->name, blink_enable ? "on" : "off", reg_val,
@@ -242,6 +241,7 @@ static int nh_led_probe(struct auxiliary_device *aux_dev,
 
 	ctrl->aux_dev = aux_dev;
 	ctrl->base = fpga_aux_dev->parent->mmio_base;
+	ctrl->reg_lock = &fpga_aux_dev->parent->led_reg_lock;
 
 	/* Determine LED type from auxiliary device name */
 	led_name = strrchr(id->name, '.');

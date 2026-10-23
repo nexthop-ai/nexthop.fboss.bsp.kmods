@@ -16,8 +16,8 @@
 
 #define DRIVER_VERSION "1.0.0"
 
-/* Ports share the same register */
-static DEFINE_MUTEX(port_led_reg_lock);
+/* Port LED registers may be shared with nh_fpga_led: RMW is serialized by
+ * the parent FPGA's led_reg_lock. */
 
 /* Resolve a physical LED number to the transceiver id its sysfs node is
  * named after; identity if the platform has no led_to_id table. */
@@ -85,7 +85,7 @@ static int nh_port_led_brightness_set(struct led_classdev *led_cdev,
 	if (ret)
 		return ret;
 
-	mutex_lock(&port_led_reg_lock);
+	mutex_lock(ctrl->reg_lock);
 	if (brightness) {
 		/* Turn off other color first, LEDs should be mutually exclusive */
 		u32 off_offset, off_bit;
@@ -95,7 +95,7 @@ static int nh_port_led_brightness_set(struct led_classdev *led_cdev,
 						     led_dev->port_num,
 						     &off_offset, &off_bit);
 		if (ret) {
-			mutex_unlock(&port_led_reg_lock);
+			mutex_unlock(ctrl->reg_lock);
 			return ret;
 		}
 		if (off_offset == offset) {
@@ -116,7 +116,7 @@ static int nh_port_led_brightness_set(struct led_classdev *led_cdev,
 		reg_val = ioread32(ctrl->base + offset) & ~BIT(bit);
 	}
 	iowrite32(reg_val, ctrl->base + offset);
-	mutex_unlock(&port_led_reg_lock);
+	mutex_unlock(ctrl->reg_lock);
 
 	return 0;
 }
@@ -176,6 +176,7 @@ static int nh_port_led_probe(struct auxiliary_device *aux_dev,
 	ctrl->platform_cfg = platform_cfg;
 	ctrl->aux_dev = aux_dev;
 	ctrl->base = fpga_aux_dev->parent->mmio_base;
+	ctrl->reg_lock = &fpga_aux_dev->parent->led_reg_lock;
 	ctrl->num_leds =
 		platform_cfg->dual_color_per_led ? PORT_LED_NUM_COLORS : 1;
 

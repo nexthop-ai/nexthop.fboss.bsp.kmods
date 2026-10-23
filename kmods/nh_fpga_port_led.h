@@ -37,6 +37,7 @@ struct port_led_dev {
 struct port_led_ctrl {
 	struct auxiliary_device *aux_dev;
 	void __iomem *base;
+	struct mutex *reg_lock; /* Parent FPGA's LED register RMW lock */
 	struct port_led_dev *leds;
 	u32 num_leds;
 	const struct nh_platform_cfg
