@@ -266,7 +266,7 @@ static const struct xcvr_ctrl_config m4061nhp_xcvr = {
 static const struct mux_config m4061nhp_mux[] = {
 	{ 0, 4, 0x0010, "MUX0 control" },
 	{ 1, 4, 0x0014, "MUX1 control" },
-	{ 3, 4, 0x0018, "MUX3 control" },
+	{ 3, 2, 0x0018, "MUX3 control" },
 	{ 4, 4, 0x001C, "MUX4 control" },
 };
 
