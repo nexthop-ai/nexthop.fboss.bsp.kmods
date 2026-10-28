@@ -86,14 +86,8 @@ static const struct nh_led_core_config m4061nhp_led_config = {
 /* ============================================================================
  * Fan
  *
- * Sunbird fan card: five dual-rotor trays. Per-tray PWM (0x0240..0x0250)
- * and tach (0x00B4..0x00C4) are separate registers; tach period is [15:0]
- * inner / [31:16] outer. The 0x00C4 tray 5 tach needs switch-card FPGA
- * 0x0404 or later; earlier images put it at 0x00C8 and read 0 at 0x00C4.
- * Trays 1-3 report ID/power-good in status register 0x00A4, trays 4-5 in
- * 0x00A8. The status registers carry no tach-ok bits, so
- * inner_tach/outer_tach are 0. Fan Card Control @ 0x00A0 holds a
- * fail/good LED bit pair per tray at bits 2*(tray-1) / 2*(tray-1)+1.
+ * Five dual-rotor trays. Tray 5 tach at 0x00C4 needs switch-card FPGA
+ * 0x0404 or later.
  * ============================================================================
  */
 
@@ -167,7 +161,7 @@ static const struct fan_card_status_addr m4061nhp_fan = {
 	.pwm_mask = 0xFF,
 	.inner_tach_mask = 0x0000FFFF,
 	.outer_tach_mask = 0xFFFF0000,
-	/* Sunbird fan shift chain sampled at 171.232 kHz. one tick = 5.84us. */
+	/* Tach sampled at 171.232 kHz: one tick = 5.84us. */
 	.tach_time_unit_ns = 5840,
 	.num_rotors = 2,
 	.fans = m4061nhp_fans,
@@ -265,8 +259,7 @@ static const struct xcvr_ctrl_config m4061nhp_xcvr = {
  *
  * Masters 0, 1, 3 and 4 each drive a 1-of-4 mux, select registers at
  * 0x0010 / 0x0014 / 0x0018 / 0x001C (bits 1:0). Master 2 is the TH6 BSC
- * and has no mux. The spec's register text calls 0x0018/0x001C masters
- * 2/3 (Sunbird wording); its pinout has I2C{0,1,3,4}_BUS_SEL only.
+ * and has no mux.
  * ============================================================================
  */
 
