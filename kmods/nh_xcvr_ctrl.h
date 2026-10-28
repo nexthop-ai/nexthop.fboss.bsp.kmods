@@ -30,6 +30,11 @@ struct xcvr_port_group {
 	u32 reset_bit;
 	u32 lp_mode_bit;
 	u32 present_bit;
+	/* Reset bit is active-high (e.g. an SFP's TX_DISABLE): invert so
+	 * xcvr_reset keeps the platform-wide active-low convention. */
+	bool reset_active_high;
+	/* No LPMode pin: xcvr_low_power is a software shadow. */
+	bool no_lp_mode;
 };
 
 /* Per-device xcvr control structure */
@@ -43,6 +48,7 @@ struct nh_xcvr_ctrl {
 	u32 reset_bit;
 	u32 lp_mode_bit;
 	u32 present_bit;
+	u8 lp_mode_shadow; /* no_lp_mode groups */
 	const struct xcvr_port_group *group; /* cached group for this port */
 	const struct nh_platform_cfg
 		*platform_cfg; /* Per-device platform descriptor */

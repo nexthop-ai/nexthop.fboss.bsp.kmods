@@ -3,6 +3,7 @@
       "nh_fpga_psu",
       "nh_fpga_mux",
       "nh_fpga_i2c",
+      "bp4f_i2c_xiic",
       "fbiob_pci",
       "nh_fpga_info",
       "nh_fpga_asic_temp",

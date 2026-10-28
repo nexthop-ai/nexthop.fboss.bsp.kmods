@@ -122,23 +122,21 @@ static int nh_fpga_fan_read_tach(struct nh_fpga_fan_controller *controller,
 	}
 }
 
-/* Convert tachometer cycles to RPM using the HW specification
- * HW formula: RPM = 60,000,000 / (3.92 * <TACH integer>)
- * where <TACH integer> is the raw tach reading from the FPGA and each count
- * represents FAN_TACH_TIME_UNIT_NS (3.92us).
+/* Convert a tach period reading to RPM. The FPGA counts the time over one
+ * fan rotation (two tach pulses) in ticks of tach_time_unit_ns, so
+ * RPM = 60e9 / (tach_time_unit_ns * tach_cycles).
  */
-u32 nh_fpga_fan_tach_to_rpm(u32 tach_cycles)
+u32 nh_fpga_fan_tach_to_rpm(u32 tach_cycles, u32 tach_time_unit_ns)
 {
 	u64 rpm;
 
 	if (tach_cycles == 0 || tach_cycles == 0xFFFF)
 		return 0; /* Fan stopped */
 
-	/* HW formula: RPM = 60,000,000 / (3.92us * tach_cycles)
-	 * Using integer arithmetic in ns: RPM = 60000000000 / (3920 * tach_cycles)
-	 */
-	rpm = div64_u64(60000000000ULL,
-			(u64)tach_cycles * FAN_TACH_TIME_UNIT_NS);
+	if (!tach_time_unit_ns)
+		tach_time_unit_ns = FAN_TACH_TIME_UNIT_NS;
+
+	rpm = div64_u64(60000000000ULL, (u64)tach_cycles * tach_time_unit_ns);
 
 	return (u32)rpm;
 }
@@ -298,7 +296,8 @@ static int nh_fpga_fan_read(struct device *dev, enum hwmon_sensor_types type,
 				return ret;
 			tach_cycles = nh_fpga_fan_read_tach(controller,
 							    fan_channel, inner);
-			*val = nh_fpga_fan_tach_to_rpm(tach_cycles);
+			*val = nh_fpga_fan_tach_to_rpm(
+				tach_cycles, fan_cfg->tach_time_unit_ns);
 			return 0;
 		}
 		break;
@@ -467,16 +466,11 @@ static int nh_fpga_fan_led_set(struct led_classdev *led_cdev,
 	u32 reg_val, new_reg_val;
 	u32 bit_pos, sibling_bit;
 	bool led_on = (brightness != LED_OFF);
-	int ret;
 
-	/* Check if fan is present before controlling LED */
-	ret = nh_fpga_fan_get_status_and_presence(controller,
-						  fan_led->fan_index,
-						  &controller->aux_dev->dev,
-						  "LED control");
-	if (ret)
-		return ret;
-
+	/* No presence check: the LED bits are a plain latch the FPGA shifts out
+	 * to the fan module, so a fail color set while the slot is empty must
+	 * land, as it is what a reinserted fan shows until it reaches speed.
+	 */
 	fan = &controller->platform_cfg->fan_cfg->fans[fan_led->fan_index];
 	bit_pos = fan_led->is_good_led ? fan->ctrl_good_led_bit :
 					 fan->ctrl_fail_led_bit;

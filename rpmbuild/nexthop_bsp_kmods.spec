@@ -29,7 +29,7 @@ mkdir -p %{buildroot}/lib/modules/%{kver}/extra/nexthop
 
 # Install kernel modules
 cd %{kmodsrc}
-install -m 644 *.ko %{buildroot}/lib/modules/%{kver}/extra/nexthop/
+install -m 644 *.ko backports/*.ko %{buildroot}/lib/modules/%{kver}/extra/nexthop/
 
 # Install configuration and scripts
 install -m 644 %{_sourcedir}/kmods/scripts/kmods.json %{buildroot}/usr/local/nexthop_bsp/%{kver}/

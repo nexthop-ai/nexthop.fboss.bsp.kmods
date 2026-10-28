@@ -40,6 +40,7 @@ struct nh_platform_cfg; /* forward declaration — full definition in platform/n
 struct nh_led_core_controller {
 	struct auxiliary_device *aux_dev; /* Auxiliary device */
 	void __iomem *base; /* MMIO base address */
+	struct mutex *reg_lock; /* Parent FPGA's LED register RMW lock */
 	enum nh_led_type led_type; /* LED type (PSU/FAN/SYS) */
 	struct nh_led_core_dev *leds; /* Pointer to LED devices array */
 	const struct nh_platform_cfg
