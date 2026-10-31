@@ -14,7 +14,8 @@ ifneq ($(KERNELRELEASE),)
                         platform/m4061nhp.o \
                         platform/m4062nhp_common.o \
                         platform/m4062nhp_fpga0.o \
-                        platform/m4062nhp_fpga1.o
+                        platform/m4062nhp_fpga1.o \
+                        platform/m4340nhp.o
 
     # Object files for fbiob_pci.ko
     fbiob_pci-objs := nh_fpga_fbiob_main.o nh_fpga_aux.o nh_fpga_irq.o \
