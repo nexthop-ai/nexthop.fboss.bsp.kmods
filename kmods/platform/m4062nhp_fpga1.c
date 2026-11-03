@@ -24,6 +24,7 @@ static const struct xcvr_port_group m4062nhp_fpga1_xcvr_groups[] = {
 		.end_port = 32,
 		.reset_reg_offset = 0x006C,
 		.lp_mode_reg_offset = 0x0070,
+		.lp_mode_active_low = true,
 		.present_reg_offset = 0x0074,
 	},
 	{
@@ -31,6 +32,7 @@ static const struct xcvr_port_group m4062nhp_fpga1_xcvr_groups[] = {
 		.end_port = 64,
 		.reset_reg_offset = 0x0030,
 		.lp_mode_reg_offset = 0x0034,
+		.lp_mode_active_low = true,
 		.present_reg_offset = 0x0038,
 	},
 	{
@@ -38,6 +40,7 @@ static const struct xcvr_port_group m4062nhp_fpga1_xcvr_groups[] = {
 		.end_port = 96,
 		.reset_reg_offset = 0x0044,
 		.lp_mode_reg_offset = 0x0048,
+		.lp_mode_active_low = true,
 		.present_reg_offset = 0x004C,
 	},
 	{
@@ -45,6 +48,7 @@ static const struct xcvr_port_group m4062nhp_fpga1_xcvr_groups[] = {
 		.end_port = 128,
 		.reset_reg_offset = 0x0058,
 		.lp_mode_reg_offset = 0x005C,
+		.lp_mode_active_low = true,
 		.present_reg_offset = 0x0060,
 	},
 };
