@@ -125,14 +125,17 @@ static ssize_t xcvr_low_power_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
 	struct nh_xcvr_ctrl *ctrl = dev_get_drvdata(dev);
+	int val;
 
 	if (ctrl->group->no_lp_mode)
 		return sysfs_emit(buf, "%u\n", ctrl->lp_mode_shadow);
 
-	return sysfs_emit(buf, "%u\n",
-			  nh_xcvr_ctrl_read_reg(ctrl,
-						ctrl->group->lp_mode_reg_offset,
-						ctrl->lp_mode_bit));
+	val = nh_xcvr_ctrl_read_reg(ctrl, ctrl->group->lp_mode_reg_offset,
+				    ctrl->lp_mode_bit);
+	if (ctrl->group->lp_mode_active_low)
+		val = !val;
+
+	return sysfs_emit(buf, "%u\n", val);
 }
 
 static ssize_t xcvr_low_power_store(struct device *dev,
@@ -150,6 +153,10 @@ static ssize_t xcvr_low_power_store(struct device *dev,
 		ctrl->lp_mode_shadow = !!value;
 		return count;
 	}
+
+	value = !!value;
+	if (ctrl->group->lp_mode_active_low)
+		value = !value;
 
 	nh_xcvr_ctrl_write_reg(ctrl, ctrl->group->lp_mode_reg_offset,
 			       ctrl->lp_mode_bit, value);

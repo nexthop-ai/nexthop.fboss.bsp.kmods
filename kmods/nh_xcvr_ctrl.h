@@ -33,6 +33,8 @@ struct xcvr_port_group {
 	/* Reset bit is active-high (e.g. an SFP's TX_DISABLE): invert so
 	 * xcvr_reset keeps the platform-wide active-low convention. */
 	bool reset_active_high;
+	/* Set to true if FPGA bit = 0 means xcvr is in low power mode */
+	bool lp_mode_active_low;
 	/* No LPMode pin: xcvr_low_power is a software shadow. */
 	bool no_lp_mode;
 };
