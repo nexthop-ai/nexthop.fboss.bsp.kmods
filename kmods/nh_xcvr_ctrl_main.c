@@ -312,6 +312,9 @@ static int nh_xcvr_ctrl_probe(struct auxiliary_device *aux_dev,
 		ctrl->present_bit = bit_pos;
 	}
 
+	/* Store ctrl in auxiliary device data */
+	auxiliary_set_drvdata(aux_dev, ctrl);
+
 	/* Create sysfs attributes */
 	ret = nh_xcvr_ctrl_create_attrs(&aux_dev->dev, ctrl->port_num);
 	if (ret) {
@@ -319,9 +322,6 @@ static int nh_xcvr_ctrl_probe(struct auxiliary_device *aux_dev,
 			"Failed to create sysfs attributes: %d\n", ret);
 		return ret;
 	}
-
-	/* Store ctrl in auxiliary device data */
-	auxiliary_set_drvdata(aux_dev, ctrl);
 
 	dev_info(&aux_dev->dev, "NH xcvr ctrl driver registered\n");
 	return 0;
