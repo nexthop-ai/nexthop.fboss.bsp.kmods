@@ -6,7 +6,6 @@
 
 #include <linux/types.h>
 
-/* Mux configuration for a single I2C master */
 struct mux_config {
 	int logical_master;
 	int num_channels;

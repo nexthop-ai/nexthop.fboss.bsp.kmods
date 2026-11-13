@@ -41,7 +41,6 @@ static DECLARE_BITMAP(minor_bitmap, FBIOB_MAX_DEVICES);
 
 MODULE_DEVICE_TABLE(pci, nh_fpga_pci_ids);
 
-/* Character device operations */
 static int fbiob_open(struct inode *inode, struct file *file)
 {
 	struct nh_fpga_pci_dev *fbiob_dev;
@@ -79,10 +78,8 @@ static long fbiob_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			return -EFAULT;
 		}
 
-		/* Ensure null termination */
 		aux_data.id.name[sizeof(aux_data.id.name) - 1] = '\0';
 
-		/* Validate offsets are within MMIO region */
 		if (aux_data.csr_offset >= fbiob_dev->mmio_len ||
 		    (aux_data.iobuf_offset != FBIOB_INVALID_OFFSET &&
 		     aux_data.iobuf_offset >= fbiob_dev->mmio_len)) {
@@ -97,7 +94,6 @@ static long fbiob_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			 "FBIOB_IOC_NEW_DEVICE: Creating device '%s'\n",
 			 aux_data.id.name);
 
-		/* Create auxiliary bus device */
 		ret = nh_fpga_create_aux_device(fbiob_dev, &aux_data);
 		break;
 
@@ -109,14 +105,12 @@ static long fbiob_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			return -EFAULT;
 		}
 
-		/* Ensure null termination */
 		aux_data.id.name[sizeof(aux_data.id.name) - 1] = '\0';
 
 		dev_info(fbiob_dev->dev,
 			 "FBIOB_IOC_DEL_DEVICE: Deleting device '%s'\n",
 			 aux_data.id.name);
 
-		/* Delete auxiliary device */
 		ret = nh_fpga_remove_aux_device(fbiob_dev, &aux_data.id);
 		break;
 
@@ -136,7 +130,6 @@ static const struct file_operations fbiob_fops = {
 	.llseek = noop_llseek,
 };
 
-/* Find available minor number */
 static int nh_fpga_get_minor(void)
 {
 	int minor;
@@ -152,7 +145,6 @@ static int nh_fpga_get_minor(void)
 	return minor;
 }
 
-/* Release minor number */
 static void nh_fpga_put_minor(int minor)
 {
 	if (minor >= 0 && minor < FBIOB_MAX_DEVICES) {
@@ -253,7 +245,6 @@ static int nh_fpga_setup_i2c_interrupts(struct nh_fpga_pci_dev *fbiob_dev,
 	return 0;
 }
 
-/* PCIe probe function */
 static int nh_fpga_pci_probe(struct pci_dev *pdev,
 			     const struct pci_device_id *id)
 {
@@ -270,10 +261,9 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 		return minor;
 	}
 
-	/* Then allocate resources */
 	fbiob_dev = devm_kzalloc(&pdev->dev, sizeof(*fbiob_dev), GFP_KERNEL);
 	if (!fbiob_dev) {
-		nh_fpga_put_minor(minor); /* Clean up minor on memory failure */
+		nh_fpga_put_minor(minor);
 		return -ENOMEM;
 	}
 
@@ -282,7 +272,6 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 	mutex_init(&fbiob_dev->lock);
 	mutex_init(&fbiob_dev->led_reg_lock);
 
-	/* Enable PCIe device */
 	ret = pci_enable_device(pdev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to enable PCIe device: %d\n", ret);
@@ -294,7 +283,6 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 	 * sub-regions, which would hit -EBUSY if the parent reserved the BAR.
 	 */
 
-	/* Map MMIO region */
 	fbiob_dev->mmio_len = pci_resource_len(pdev, 0);
 	fbiob_dev->mmio_base = pci_iomap(pdev, 0, fbiob_dev->mmio_len);
 	if (!fbiob_dev->mmio_base) {
@@ -310,7 +298,6 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 	if (ret)
 		goto err_disable_device;
 
-	/* Set up DMA */
 	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
 	if (ret) {
 		ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
@@ -330,7 +317,6 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 	 * goes live; an early ioctl must not walk an uninitialized list. */
 	INIT_LIST_HEAD(&fbiob_dev->aux_dev_list);
 
-	/* Create character device */
 	cdev_init(&fbiob_dev->cdev, &fbiob_fops);
 	fbiob_dev->cdev.owner = THIS_MODULE;
 
@@ -341,7 +327,6 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 		goto err_disable_device;
 	}
 
-	/* Create device node */
 	snprintf(dev_name, sizeof(dev_name), "fbiob_%04x.%04x.%04x.%04x",
 		 pdev->vendor, pdev->device, pdev->subsystem_vendor,
 		 pdev->subsystem_device);
@@ -355,7 +340,6 @@ static int nh_fpga_pci_probe(struct pci_dev *pdev,
 		goto err_del_cdev;
 	}
 
-	/* Set driver data */
 	pci_set_drvdata(pdev, fbiob_dev);
 
 	dev_info(&pdev->dev,
@@ -373,7 +357,6 @@ err_put_minor:
 	return ret;
 }
 
-/* PCIe remove function */
 static void nh_fpga_pci_remove(struct pci_dev *pdev)
 {
 	struct nh_fpga_pci_dev *fbiob_dev = pci_get_drvdata(pdev);
@@ -383,7 +366,6 @@ static void nh_fpga_pci_remove(struct pci_dev *pdev)
 
 	dev_info(&pdev->dev, "Removing NH FPGA fbiob device\n");
 
-	/* Remove all auxiliary devices */
 	{
 		struct nh_fpga_aux_dev *aux_dev, *tmp;
 		LIST_HEAD(devices_to_remove);
@@ -398,7 +380,6 @@ static void nh_fpga_pci_remove(struct pci_dev *pdev)
 					 node) {
 			list_del(&aux_dev->node);
 
-			/* Delete and uninitialize the device */
 			auxiliary_device_delete(&aux_dev->aux_dev);
 			auxiliary_device_uninit(&aux_dev->aux_dev);
 			/* Note: kfree(aux_dev) is handled by the release function */
@@ -412,7 +393,6 @@ static void nh_fpga_pci_remove(struct pci_dev *pdev)
 		device_destroy(nh_fpga_class,
 			       MKDEV(MAJOR(fbiob_devt), fbiob_dev->minor));
 
-	/* Remove character device */
 	if (fbiob_dev->cdev.owner)
 		cdev_del(&fbiob_dev->cdev);
 
@@ -423,11 +403,9 @@ static void nh_fpga_pci_remove(struct pci_dev *pdev)
 	/* Release minor number last */
 	nh_fpga_put_minor(fbiob_dev->minor);
 
-	/* Clear driver data */
 	pci_set_drvdata(pdev, NULL);
 }
 
-/* PCIe driver structure */
 static struct pci_driver nh_fpga_pci_driver = {
 	.name = DRIVER_NAME,
 	.id_table = nh_fpga_pci_ids,
@@ -435,14 +413,12 @@ static struct pci_driver nh_fpga_pci_driver = {
 	.remove = nh_fpga_pci_remove,
 };
 
-/* Module initialization */
 static int __init nh_fpga_pci_init(void)
 {
 	int ret;
 
 	pr_info("NH FPGA PCIe driver v%s loading\n", DRIVER_VERSION);
 
-	/* Allocate character device numbers */
 	ret = alloc_chrdev_region(&fbiob_devt, 0, FBIOB_MAX_DEVICES,
 				  DRIVER_NAME);
 	if (ret) {
@@ -451,7 +427,6 @@ static int __init nh_fpga_pci_init(void)
 		return ret;
 	}
 
-	/* Create device class */
 	nh_fpga_class = class_create(DRIVER_NAME);
 	if (IS_ERR(nh_fpga_class)) {
 		ret = PTR_ERR(nh_fpga_class);
@@ -459,7 +434,6 @@ static int __init nh_fpga_pci_init(void)
 		goto err_unregister_chrdev;
 	}
 
-	/* Register PCIe driver */
 	ret = pci_register_driver(&nh_fpga_pci_driver);
 	if (ret) {
 		pr_err("Failed to register PCIe driver: %d\n", ret);
@@ -476,7 +450,6 @@ err_unregister_chrdev:
 	return ret;
 }
 
-/* Module cleanup */
 static void __exit nh_fpga_pci_exit(void)
 {
 	pr_info("NH FPGA PCIe driver unloading\n");

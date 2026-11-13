@@ -59,8 +59,7 @@ struct nh_platform_cfg {
 	const char *name;
 
 	/* LED subsystem (PSU/FAN/SYS LEDs) */
-	const struct nh_led_core_config
-		*led_core_cfg; /* Core LED driver (all types) */
+	const struct nh_led_core_config *led_core_cfg;
 
 	/* Fan/PWM subsystem */
 	const struct fan_card_status_addr *fan_cfg;

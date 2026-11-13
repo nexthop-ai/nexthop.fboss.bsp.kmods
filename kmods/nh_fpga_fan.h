@@ -10,18 +10,15 @@
 #include <linux/types.h>
 #include <linux/bits.h>
 
-/* Fan module ID values */
 #define FAN_MODULE_ID_ABSENT 0xF
 #define FAN_MODULE_ID_DUAL_ROTOR 0x7
 
-/* Fan card type values */
 #define FAN_CARD_TYPE_INVALID 0x0
 #define FAN_CARD_TYPE_RAPTOR_2RU_12V 0x1
 
 /* Tachometer time units (in nanoseconds for integer arithmetic) */
 #define FAN_TACH_TIME_UNIT_NS 3920 /* default tick: 3.92us = 3920ns */
 
-/* PWM scaling constants */
 #define FAN_PWM_MIN 0
 #define FAN_PWM_MAX 255
 #define FAN_PWM_DEFAULT 0x80 /* 50% duty cycle */
@@ -33,7 +30,6 @@
 
 struct nh_platform_cfg; /* forward declaration — full definition in platform/nh_platform.h */
 
-/* LED device structure for each fan LED */
 struct nh_fpga_fan_led {
 	struct led_classdev led_cdev;
 	struct nh_fpga_fan_controller *fan_ctrl;
@@ -41,7 +37,6 @@ struct nh_fpga_fan_led {
 	bool is_good_led; /* true for green LED, false for red LED */
 };
 
-/* Fan controller structure */
 struct nh_fpga_fan_controller {
 	struct auxiliary_device *aux_dev;
 	struct device *hwmon_dev;
@@ -55,25 +50,22 @@ struct nh_fpga_fan_controller {
 	u32 *fan_outer_tach_offsets;
 	/* fanN_label strings, one per hwmon fan channel */
 	const char **fan_labels;
-	const struct nh_platform_cfg
-		*platform_cfg; /* Per-device platform descriptor */
+	const struct nh_platform_cfg *platform_cfg;
 	const struct attribute_group
 		*attr_group; /* Dynamically-built per-fan attrs */
 };
 
-/* Fan register structure for easy access */
 struct fan_regs {
 	u32 pwm_inner_tach; /* PWM control and inner tach status */
 	u32 outer_tach; /* Outer tach status */
 };
 
-/* Fan status structure */
 struct fan_status {
-	bool present; /* Fan module present */
-	bool power_good; /* Fan power good */
-	u8 module_id; /* Fan module ID */
-	bool inner_tach_ok; /* Inner tachometer status */
-	bool outer_tach_ok; /* Outer tachometer status */
+	bool present;
+	bool power_good;
+	u8 module_id;
+	bool inner_tach_ok;
+	bool outer_tach_ok;
 };
 
 struct fan {
@@ -101,10 +93,8 @@ struct fan_card_status_addr {
 	u32 card_type_mask;
 	/* pwm_mask / inner_tach_mask / outer_tach_mask are register-position
 	 * masks (the bits as they sit in the FPGA register). The driver
-	 * derives the field shift from __ffs(mask), so a field at a non-zero
-	 * offset just declares e.g. pwm_mask = 0xFF00 — no separate shift.
-	 * read = (reg & mask) >> __ffs(mask),
-	 * write = (value << __ffs(mask)) & mask.
+	 * derives the field shift from __ffs(mask), so no separate shift is
+	 * declared.
 	 */
 	u32 pwm_mask;
 	u32 inner_tach_mask;
@@ -122,7 +112,6 @@ struct fan_card_status_addr {
 	const struct fan *fans;
 };
 
-/* Function prototypes */
 int nh_fpga_fan_get_status(struct nh_fpga_fan_controller *controller,
 			   int channel, struct fan_status *status);
 int nh_fpga_fan_get_card_type(struct nh_fpga_fan_controller *controller);

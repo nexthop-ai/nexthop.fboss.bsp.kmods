@@ -14,7 +14,7 @@
 
 #include <linux/types.h>
 
-struct nh_platform_cfg; /* forward declaration */
+struct nh_platform_cfg;
 
 /*
  * Per-platform layout of the ASIC Min/Max temperature status register.

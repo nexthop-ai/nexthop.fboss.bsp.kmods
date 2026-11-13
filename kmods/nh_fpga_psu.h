@@ -6,7 +6,7 @@
 
 #include <linux/types.h>
 
-struct nh_platform_cfg; /* forward declaration */
+struct nh_platform_cfg;
 
 /*
  * Sentinel for a not-yet-characterized PSU-present register: the driver
@@ -48,8 +48,7 @@ struct psu_fw_cfg {
  * csrOffset in platform_manager.json; present_reg_offset is relative to
  * that base.
  *
- * num_psus: number of PSUs on this platform. Set to ARRAY_SIZE() of the
- * platform's present_masks array — no hardcoded cap needed.
+ * num_psus: number of entries in present_masks.
  *
  * active_low: when true the hardware bit reads 0 for "present", so the driver
  * inverts it before reporting.

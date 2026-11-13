@@ -59,9 +59,7 @@ static const struct xcvr_ctrl_config m4062nhp_fpga1_xcvr = {
 /* ============================================================================
  * I2C mux
  *
- * Two mezzanine i2c masters each get their own select register on FPGA1
- * (revision 0x0304 split). nh_fpga_mux writes the channel index into
- * bits [1:0] of the named register, matching the layout:
+ * Two mezzanine i2c masters each get their own select register on FPGA1:
  *   master 7 (Bottom Mezz Card): reg 0x0010
  *   master 8 (Top Mezz Card)   : reg 0x0014
  * ============================================================================ */
@@ -121,13 +119,6 @@ static const struct port_led_color_addr m4062nhp_fpga1_port_led[PORT_LED_NUM_COL
  *                                  (inner period [15:0], outer period [31:16])
  *   Per-fan PWM Control          : chain 0 0x0240..0x024C, chain 1 0x0250..0x025C
  *                                  (duty [7:0], max [23:16])
- *
- * PWM and tach live in distinct registers, so pwm_offset differs from
- * inner_tach_offset/outer_tach_offset. Inner and outer tach share one
- * register, distinguished by inner_tach_mask / outer_tach_mask.
- *
- * The status register has no per-fan tach-OK bits (only PG / module-id /
- * card-type), so .inner_tach / .outer_tach are left 0.
  *
  * LED bit layout in 0x00A0 (active-low, default fail-on), per chain-local fan:
  *   chain 0: fan1 red=0/grn=1, fan2 red=2/grn=3, fan3 red=4/grn=5, fan4 red=6/grn=7

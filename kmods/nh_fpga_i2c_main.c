@@ -43,7 +43,6 @@ static atomic_t nh_fpga_xiic_pdev_id = ATOMIC_INIT(0);
 #define NH_FPGA_I2C_BLOCK_BASE 0x40000
 #define NH_FPGA_I2C_MASTER_STRIDE 0x200
 
-/* Configure mux support based on platform data and CSR offset */
 static int configure_mux_support(struct nh_fpga_i2c *i2c,
 				 struct nh_fpga_aux_dev *fpga_aux_dev,
 				 struct auxiliary_device *aux_dev,
@@ -58,7 +57,6 @@ static int configure_mux_support(struct nh_fpga_i2c *i2c,
 	dev_dbg(&aux_dev->dev, "FPGA device ID: 0x%04x, Master ID: %d\n",
 		device_id, master_id);
 
-	/* Initialize mux support fields */
 	i2c->num_mux_channels = 0;
 	i2c->mux_reg = NULL;
 	i2c->mux_client = NULL;
@@ -66,10 +64,7 @@ static int configure_mux_support(struct nh_fpga_i2c *i2c,
 	/*
 	 * Derive the logical master index from the controller's position in the
 	 * FPGA CSR block, not from master_id. mux_config.logical_master is that
-	 * positional index. The previous "master_id % 10" proxy aliased
-	 * transceiver (OSFP) masters whose id shared a last digit with a
-	 * mux-capable master onto the mux table, creating phantom muxes at 0x71
-	 * and corrupting the i2c topology.
+	 * positional index.
 	 */
 	if (csr_offset < NH_FPGA_I2C_BLOCK_BASE) {
 		dev_dbg(&aux_dev->dev,
@@ -100,7 +95,6 @@ static int configure_mux_support(struct nh_fpga_i2c *i2c,
 		return 0;
 	}
 
-	/* Known platform with mux — search for this logical master */
 	for (j = 0; j < platform_cfg->mux_count; j++) {
 		if (platform_cfg->mux_cfg[j].logical_master == logical_master) {
 			i2c->num_mux_channels =
@@ -129,7 +123,6 @@ static int configure_mux_support(struct nh_fpga_i2c *i2c,
 	return 0;
 }
 
-/* Auxiliary device probe function */
 int nh_fpga_i2c_probe(struct auxiliary_device *aux_dev,
 		      const struct auxiliary_device_id *id)
 {
@@ -261,7 +254,6 @@ err_drop_clk:
 	return ret;
 }
 
-/* Auxiliary device remove function */
 void nh_fpga_i2c_remove(struct auxiliary_device *aux_dev)
 {
 	struct nh_fpga_i2c *i2c = auxiliary_get_drvdata(aux_dev);
@@ -308,7 +300,6 @@ void nh_fpga_i2c_remove(struct auxiliary_device *aux_dev)
 	dev_info(&aux_dev->dev, "FPGA I2C controller removed\n");
 }
 
-/* Auxiliary device ID table */
 static const struct auxiliary_device_id nh_fpga_i2c_aux_id_table[] = {
 	{
 		.name = "fbiob_pci.i2c_master",
@@ -320,7 +311,6 @@ static const struct auxiliary_device_id nh_fpga_i2c_aux_id_table[] = {
 };
 MODULE_DEVICE_TABLE(auxiliary, nh_fpga_i2c_aux_id_table);
 
-/* Auxiliary driver structure */
 static struct auxiliary_driver nh_fpga_i2c_aux_driver = {
 	.name = DRIVER_NAME,
 	.probe = nh_fpga_i2c_probe,
@@ -512,7 +502,6 @@ static struct notifier_block nh_fpga_i2c_nb = {
 	.notifier_call = nh_fpga_i2c_bus_notify,
 };
 
-/* Module initialization */
 static int __init nh_fpga_i2c_init_module(void)
 {
 	int ret;
@@ -536,7 +525,6 @@ static int __init nh_fpga_i2c_init_module(void)
 	return 0;
 }
 
-/* Module cleanup */
 static void __exit nh_fpga_i2c_exit_module(void)
 {
 	pr_info("NH FPGA I2C driver unloading\n");

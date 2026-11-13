@@ -1,7 +1,7 @@
 #!/bin/bash
 # Script to build the nexthop_bsp_kmods RPM package
 
-set -e  # Exit on any error
+set -e
 
 # Get the absolute path to the BSP directory
 FBOSS_BSP_DIR="$(dirname "$(readlink -f "$0")")"

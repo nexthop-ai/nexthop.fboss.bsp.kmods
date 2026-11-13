@@ -25,10 +25,6 @@
  * The encoding from the 13-bit raw value to degC is not handled here;
  * the raw fields are surfaced as-is and any conversion is left to
  * userspace.
- *
- * base points at the device CSR block (the aux device is created with
- * the CSR offset already applied); the status register lives at
- * cfg->status_reg_offset within that block.
  */
 
 struct nh_fpga_asic_temp {

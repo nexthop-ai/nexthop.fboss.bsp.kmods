@@ -37,7 +37,6 @@ struct xcvr_port_group {
 	bool no_lp_mode;
 };
 
-/* Per-device xcvr control structure */
 struct nh_xcvr_ctrl {
 	struct auxiliary_device *aux_dev;
 	void __iomem *base;
@@ -50,8 +49,7 @@ struct nh_xcvr_ctrl {
 	u32 present_bit;
 	u8 lp_mode_shadow; /* no_lp_mode groups */
 	const struct xcvr_port_group *group; /* cached group for this port */
-	const struct nh_platform_cfg
-		*platform_cfg; /* Per-device platform descriptor */
+	const struct nh_platform_cfg *platform_cfg;
 };
 
 /* Per-platform xcvr register layout. @groups is keyed by slot (the register

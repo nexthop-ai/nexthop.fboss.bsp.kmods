@@ -25,7 +25,6 @@
  * LED Control Functions
  * ============================================================================ */
 
-/* Get LED brightness */
 static enum led_brightness nh_led_brightness_get(struct led_classdev *led_cdev)
 {
 	struct nh_led_core_dev *led_dev =
@@ -48,7 +47,6 @@ static enum led_brightness nh_led_brightness_get(struct led_classdev *led_cdev)
 	return (enum led_brightness)((reg_val >> info->color_offset) & mask);
 }
 
-/* Set LED brightness */
 static int nh_led_brightness_set(struct led_classdev *led_cdev,
 				 enum led_brightness brightness)
 {
@@ -86,7 +84,6 @@ static int nh_led_brightness_set(struct led_classdev *led_cdev,
 	return 0;
 }
 
-/* Set LED blink */
 static int nh_led_blink_set(struct led_classdev *led_cdev,
 			    unsigned long *delay_on, unsigned long *delay_off)
 {
@@ -229,7 +226,6 @@ static int nh_led_probe(struct auxiliary_device *aux_dev,
 		return -ENODEV;
 	}
 
-	/* Allocate LED devices array based on platform config */
 	ctrl->leds = devm_kzalloc(
 		&aux_dev->dev,
 		sizeof(*ctrl->leds) *

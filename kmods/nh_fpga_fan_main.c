@@ -22,7 +22,6 @@
 #define DRIVER_NAME "nh_fpga_fan"
 #define DRIVER_VERSION "1.0"
 
-/* Forward declarations */
 static int nh_fpga_fan_probe(struct auxiliary_device *aux_dev,
 			     const struct auxiliary_device_id *id);
 static void nh_fpga_fan_remove(struct auxiliary_device *aux_dev);
@@ -31,7 +30,6 @@ static void nh_fpga_fan_remove(struct auxiliary_device *aux_dev);
  * PWM Control Functions
  * ============================================================================ */
 
-/* Read PWM value for a fan */
 static int nh_fpga_fan_read_pwm(struct nh_fpga_fan_controller *controller,
 				int channel)
 {
@@ -54,7 +52,6 @@ static int nh_fpga_fan_read_pwm(struct nh_fpga_fan_controller *controller,
 	return hw_pwm;
 }
 
-/* Write PWM value for a fan */
 static int nh_fpga_fan_write_pwm(struct nh_fpga_fan_controller *controller,
 				 int channel, long value)
 {
@@ -84,7 +81,6 @@ static int nh_fpga_fan_write_pwm(struct nh_fpga_fan_controller *controller,
 		"PWM write: channel=%d, addr=%p, old=0x%08x, new=0x%08x, hw_pwm=%d\n",
 		channel, reg_addr, reg_val, new_reg_val, hw_pwm);
 
-	/* Read back to verify */
 	reg_val = ioread32(reg_addr);
 	dev_dbg(&controller->aux_dev->dev,
 		"PWM readback: channel=%d, reg_val=0x%08x, hw_pwm=%d\n",
@@ -97,7 +93,6 @@ static int nh_fpga_fan_write_pwm(struct nh_fpga_fan_controller *controller,
  * Fan Tachometer Functions
  * ============================================================================ */
 
-/* Read tachometer value for a fan */
 static int nh_fpga_fan_read_tach(struct nh_fpga_fan_controller *controller,
 				 int channel, bool inner)
 {
@@ -176,7 +171,6 @@ nh_fpga_fan_get_status_and_presence(struct nh_fpga_fan_controller *controller,
 	return 0;
 }
 
-/* Get fan status information */
 int nh_fpga_fan_get_status(struct nh_fpga_fan_controller *controller,
 			   int channel, struct fan_status *status)
 {
@@ -210,17 +204,14 @@ int nh_fpga_fan_get_status(struct nh_fpga_fan_controller *controller,
 	return 0;
 }
 
-/* Get fan card type */
 int nh_fpga_fan_get_card_type(struct nh_fpga_fan_controller *controller)
 {
 	u32 reg_val;
 
-	/* Read status register */
 	reg_val = ioread32(
 		controller->base +
 		controller->platform_cfg->fan_cfg->fans[0].status_offset);
 
-	/* Extract card type */
 	return (reg_val & controller->platform_cfg->fan_cfg->card_type_mask);
 }
 
@@ -228,7 +219,6 @@ int nh_fpga_fan_get_card_type(struct nh_fpga_fan_controller *controller)
  * hwmon Interface Functions
  * ============================================================================ */
 
-/* hwmon is_visible function */
 static umode_t nh_fpga_fan_is_visible(const void *data,
 				      enum hwmon_sensor_types type, u32 attr,
 				      int channel)
@@ -257,7 +247,6 @@ static umode_t nh_fpga_fan_is_visible(const void *data,
 	return 0;
 }
 
-/* hwmon read function */
 static int nh_fpga_fan_read(struct device *dev, enum hwmon_sensor_types type,
 			    u32 attr, int channel, long *val)
 {
@@ -269,7 +258,6 @@ static int nh_fpga_fan_read(struct device *dev, enum hwmon_sensor_types type,
 	switch (type) {
 	case hwmon_pwm:
 		if (attr == hwmon_pwm_input) {
-			/* Check if fan is present before reading PWM */
 			ret = nh_fpga_fan_get_status_and_presence(
 				controller, channel, dev, "PWM read");
 			if (ret)
@@ -289,7 +277,6 @@ static int nh_fpga_fan_read(struct device *dev, enum hwmon_sensor_types type,
 			 */
 			fan_channel = channel / fan_cfg->num_rotors;
 			inner = (channel % fan_cfg->num_rotors) == 0;
-			/* Check if fan is present before reading tachometer */
 			ret = nh_fpga_fan_get_status_and_presence(
 				controller, fan_channel, dev, "Fan speed read");
 			if (ret)
@@ -307,7 +294,6 @@ static int nh_fpga_fan_read(struct device *dev, enum hwmon_sensor_types type,
 	return -EOPNOTSUPP;
 }
 
-/* hwmon write function */
 static int nh_fpga_fan_write(struct device *dev, enum hwmon_sensor_types type,
 			     u32 attr, int channel, long val)
 {
@@ -317,7 +303,6 @@ static int nh_fpga_fan_write(struct device *dev, enum hwmon_sensor_types type,
 	switch (type) {
 	case hwmon_pwm:
 		if (attr == hwmon_pwm_input) {
-			/* Check if fan is present before writing PWM */
 			ret = nh_fpga_fan_get_status_and_presence(
 				controller, channel, dev, "PWM write");
 			if (ret)
@@ -410,13 +395,9 @@ nh_fpga_fan_build_chip_info(struct device *dev,
 	return chip;
 }
 
-/* Build the fanN_label strings, one per hwmon fan channel.
- *
- * Raw channel numbers say nothing about which physical rotor they read: the
- * labels are what let a technician map a failing channel to a fan tray. The
- * channel-to-tray mapping here must match the read path, so both derive it
- * from num_rotors: dual-tach fans get fan<tray>_inner / fan<tray>_outer,
- * single-tach fans just fan<tray>.
+/* Build the fanN_label strings, one per hwmon fan channel: dual-tach fans
+ * get fan<tray>_inner / fan<tray>_outer, single-tach fans just fan<tray>.
+ * The channel-to-tray mapping must match the read path.
  *
  * read_string hands out a borrowed pointer, so the strings are formatted once
  * here rather than per read. Memory is devm-managed against @dev.
@@ -455,7 +436,6 @@ nh_fpga_fan_build_labels(struct device *dev,
  * LED Control Functions
  * ============================================================================ */
 
-/* LED brightness set function */
 static int nh_fpga_fan_led_set(struct led_classdev *led_cdev,
 			       enum led_brightness brightness)
 {
@@ -480,7 +460,6 @@ static int nh_fpga_fan_led_set(struct led_classdev *led_cdev,
 
 	mutex_lock(&controller->lock);
 
-	/* Read current control register */
 	reg_val = ioread32(controller->base +
 			   controller->platform_cfg->fan_cfg->ctrl_offset);
 	new_reg_val = reg_val;
@@ -498,7 +477,6 @@ static int nh_fpga_fan_led_set(struct led_classdev *led_cdev,
 		new_reg_val &= ~bit_pos;
 	}
 
-	/* Write updated value */
 	iowrite32(new_reg_val,
 		  controller->base +
 			  controller->platform_cfg->fan_cfg->ctrl_offset);
@@ -513,7 +491,6 @@ static int nh_fpga_fan_led_set(struct led_classdev *led_cdev,
 	return 0;
 }
 
-/* LED brightness get function */
 static enum led_brightness nh_fpga_fan_led_get(struct led_classdev *led_cdev)
 {
 	struct nh_fpga_fan_led *fan_led =
@@ -525,7 +502,6 @@ static enum led_brightness nh_fpga_fan_led_get(struct led_classdev *led_cdev)
 	bool led_on;
 	int ret;
 
-	/* Check if fan is present before reading LED state */
 	ret = nh_fpga_fan_get_status_and_presence(controller,
 						  fan_led->fan_index,
 						  &controller->aux_dev->dev,
@@ -538,7 +514,6 @@ static enum led_brightness nh_fpga_fan_led_get(struct led_classdev *led_cdev)
 	bit_pos = fan_led->is_good_led ? fan->ctrl_good_led_bit :
 					 fan->ctrl_fail_led_bit;
 
-	/* Read current control register */
 	reg_val = ioread32(controller->base +
 			   controller->platform_cfg->fan_cfg->ctrl_offset);
 	led_on = !!(reg_val & bit_pos);
@@ -571,14 +546,12 @@ static void nh_fpga_fan_init_leds(struct nh_fpga_fan_controller *controller)
 	mutex_unlock(&controller->lock);
 }
 
-/* Register LED class devices for all fans */
 static int nh_fpga_fan_register_leds(struct nh_fpga_fan_controller *controller)
 {
 	int i, ret;
 	char led_name[64];
 
 	for (i = 0; i < controller->num_fan_trays; i++) {
-		/* Register good (blue) LED */
 		controller->good_leds[i].fan_ctrl = controller;
 		controller->good_leds[i].fan_index = i;
 		controller->good_leds[i].is_good_led = true;
@@ -610,7 +583,6 @@ static int nh_fpga_fan_register_leds(struct nh_fpga_fan_controller *controller)
 			return ret;
 		}
 
-		/* Register fail (amber) LED */
 		controller->fail_leds[i].fan_ctrl = controller;
 		controller->fail_leds[i].fan_index = i;
 		controller->fail_leds[i].is_good_led = false;
@@ -653,7 +625,6 @@ static int nh_fpga_fan_register_leds(struct nh_fpga_fan_controller *controller)
  * Sysfs Interface Functions
  * ============================================================================ */
 
-/* Fan status sysfs show function */
 static ssize_t fan_status_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
@@ -662,7 +633,6 @@ static ssize_t fan_status_show(struct device *dev,
 	int fan_num;
 	int ret;
 
-	/* Extract fan number from attribute name */
 	if (sscanf(attr->attr.name, "fan%d_status", &fan_num) != 1 ||
 	    fan_num < 1)
 		return -EINVAL;
@@ -671,7 +641,7 @@ static ssize_t fan_status_show(struct device *dev,
 	if (fan_num > controller->num_fan_trays)
 		return -EINVAL;
 
-	fan_num--; /* Convert to 0-based index */
+	fan_num--;
 
 	ret = nh_fpga_fan_get_status(controller, fan_num, &status);
 	if (ret)
@@ -684,7 +654,6 @@ static ssize_t fan_status_show(struct device *dev,
 		status.inner_tach_ok, status.outer_tach_ok);
 }
 
-/* Fan card type sysfs show function */
 static ssize_t fan_card_type_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
@@ -718,7 +687,6 @@ static ssize_t fan_present_show(struct device *dev,
 	int fan_num;
 	int ret;
 
-	/* Extract fan number from attribute name */
 	if (sscanf(attr->attr.name, "fan%d_present", &fan_num) != 1 ||
 	    fan_num < 1)
 		return -EINVAL;
@@ -726,7 +694,7 @@ static ssize_t fan_present_show(struct device *dev,
 	if (fan_num > controller->num_fan_trays)
 		return -EINVAL;
 
-	fan_num--; /* Convert to 0-based index */
+	fan_num--;
 
 	ret = nh_fpga_fan_get_status(controller, fan_num, &status);
 	if (ret)
@@ -747,16 +715,14 @@ static ssize_t fan_led_simple_show(struct device *dev,
 	bool good_color, fail_color;
 	int ret;
 
-	/* Extract fan number from attribute name */
 	if (sscanf(attr->attr.name, "fan%d_led", &fan_num) != 1 || fan_num < 1)
 		return -EINVAL;
 
 	if (fan_num > controller->num_fan_trays)
 		return -EINVAL;
 
-	fan_num--; /* Convert to 0-based index */
+	fan_num--;
 
-	/* Check if fan is present before reading LED state */
 	ret = nh_fpga_fan_get_status_and_presence(controller, fan_num, dev,
 						  "LED read");
 	if (ret)
@@ -790,7 +756,6 @@ static ssize_t fan_led_simple_store(struct device *dev,
 	u32 good_color_bit, fail_color_bit;
 	int ret;
 
-	/* Extract fan number from attribute name */
 	if (sscanf(attr->attr.name, "fan%d_led", &fan_num) != 1 || fan_num < 1)
 		return -EINVAL;
 
@@ -800,9 +765,8 @@ static ssize_t fan_led_simple_store(struct device *dev,
 	if (kstrtoint(buf, 10, &led_val))
 		return -EINVAL;
 
-	fan_num--; /* Convert to 0-based index */
+	fan_num--;
 
-	/* Check if fan is present before controlling LED */
 	ret = nh_fpga_fan_get_status_and_presence(controller, fan_num, dev,
 						  "LED write");
 	if (ret)
@@ -826,14 +790,12 @@ static ssize_t fan_led_simple_store(struct device *dev,
 		break;
 	}
 
-	/* Calculate bit positions */
 	fan = &controller->platform_cfg->fan_cfg->fans[fan_num];
 	good_color_bit = fan->ctrl_good_led_bit;
 	fail_color_bit = fan->ctrl_fail_led_bit;
 
 	mutex_lock(&controller->lock);
 
-	/* Update hardware register */
 	reg_val = ioread32(controller->base +
 			   controller->platform_cfg->fan_cfg->ctrl_offset);
 	new_reg_val = reg_val;
@@ -942,7 +904,6 @@ nh_fpga_fan_build_attr_group(struct device *dev, u32 num_fans)
  * Driver Infrastructure
  * ============================================================================ */
 
-/* Auxiliary device probe function */
 static int nh_fpga_fan_probe(struct auxiliary_device *aux_dev,
 			     const struct auxiliary_device_id *id)
 {
@@ -969,7 +930,6 @@ static int nh_fpga_fan_probe(struct auxiliary_device *aux_dev,
 		return -EINVAL;
 	}
 
-	/* Allocate fan controller structure */
 	controller =
 		devm_kzalloc(&aux_dev->dev, sizeof(*controller), GFP_KERNEL);
 	if (!controller)
@@ -992,7 +952,6 @@ static int nh_fpga_fan_probe(struct auxiliary_device *aux_dev,
 	    !controller->fan_outer_tach_offsets)
 		return -ENOMEM;
 
-	/* Populate offset arrays */
 	for (i = 0; i < controller->platform_cfg->fan_cfg->num_fan_controllers;
 	     i++) {
 		const struct fan *fan =
@@ -1030,7 +989,6 @@ static int nh_fpga_fan_probe(struct auxiliary_device *aux_dev,
 		return -EINVAL;
 	}
 
-	/* Initialize mutex */
 	mutex_init(&controller->lock);
 
 	dev_info(
@@ -1084,7 +1042,6 @@ static int nh_fpga_fan_probe(struct auxiliary_device *aux_dev,
 	/* Clear the power-up default before exposing the LEDs. */
 	nh_fpga_fan_init_leds(controller);
 
-	/* Register LED class devices */
 	ret = nh_fpga_fan_register_leds(controller);
 	if (ret) {
 		dev_err(&aux_dev->dev, "Failed to register LED devices: %d\n",
@@ -1092,7 +1049,6 @@ static int nh_fpga_fan_probe(struct auxiliary_device *aux_dev,
 		return ret;
 	}
 
-	/* Store fan controller in auxiliary device data */
 	auxiliary_set_drvdata(aux_dev, controller);
 
 	dev_info(
@@ -1102,14 +1058,12 @@ static int nh_fpga_fan_probe(struct auxiliary_device *aux_dev,
 	return 0;
 }
 
-/* Auxiliary device remove function */
 static void nh_fpga_fan_remove(struct auxiliary_device *aux_dev)
 {
 	struct nh_fpga_fan_controller *controller =
 		auxiliary_get_drvdata(aux_dev);
 
 	if (controller) {
-		/* Clear auxiliary device data to prevent further access */
 		auxiliary_set_drvdata(aux_dev, NULL);
 	}
 
@@ -1117,7 +1071,6 @@ static void nh_fpga_fan_remove(struct auxiliary_device *aux_dev)
 	dev_info(&aux_dev->dev, "FPGA Fan controller removed\n");
 }
 
-/* Auxiliary device ID table */
 static const struct auxiliary_device_id nh_fpga_fan_aux_id_table[] = {
 	{
 		.name = "fbiob_pci.fan_ctrl",
@@ -1126,7 +1079,6 @@ static const struct auxiliary_device_id nh_fpga_fan_aux_id_table[] = {
 };
 MODULE_DEVICE_TABLE(auxiliary, nh_fpga_fan_aux_id_table);
 
-/* Auxiliary driver structure */
 static struct auxiliary_driver nh_fpga_fan_aux_driver = {
 	.name = DRIVER_NAME,
 	.probe = nh_fpga_fan_probe,
@@ -1138,7 +1090,6 @@ static struct auxiliary_driver nh_fpga_fan_aux_driver = {
  * Module Infrastructure
  * ============================================================================ */
 
-/* Module initialization */
 static int __init nh_fpga_fan_init_module(void)
 {
 	int ret;
@@ -1155,7 +1106,6 @@ static int __init nh_fpga_fan_init_module(void)
 	return 0;
 }
 
-/* Module cleanup */
 static void __exit nh_fpga_fan_exit_module(void)
 {
 	pr_info("NH FPGA Fan driver unloading\n");

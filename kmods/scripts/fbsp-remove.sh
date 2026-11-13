@@ -24,7 +24,6 @@ unload_modules() {
     done
 }
 
-# Extract module lists from kmods.json using jq utility
 BSP_KMODS=$(jq -r '.bspKmods[]' "$KMODS_JSON" 2>/dev/null)
 SHARED_KMODS=$(jq -r '.sharedKmods[]' "$KMODS_JSON" 2>/dev/null)
 

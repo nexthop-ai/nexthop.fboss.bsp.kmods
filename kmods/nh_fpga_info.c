@@ -10,14 +10,12 @@
 #define DRIVER_NAME "nh_fpga_info"
 #define DRIVER_VERSION "1.0"
 
-/* FPGA version register offsets */
 #define FPGA_VERSION_REG_OFFSET 0x0000
 #define FPGA_VERSION_MAJOR_MASK 0x00000F00
 #define FPGA_VERSION_MAJOR_SHIFT 8
 #define FPGA_VERSION_MINOR_MASK 0x000000FF
 #define FPGA_VERSION_MINOR_SHIFT 0
 
-/* FPGA info device structure */
 struct nh_fpga_info {
 	struct auxiliary_device *aux_dev;
 	void __iomem *base;
@@ -34,7 +32,6 @@ static ssize_t fw_ver_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(fw_ver);
 
-/* Sysfs attribute: fpga_ver */
 static ssize_t fpga_ver_show(struct device *dev, struct device_attribute *attr,
 			     char *buf)
 {
@@ -43,7 +40,6 @@ static ssize_t fpga_ver_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(fpga_ver);
 
-/* Sysfs attribute: fpga_sub_ver */
 static ssize_t fpga_sub_ver_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)
 {
@@ -52,7 +48,6 @@ static ssize_t fpga_sub_ver_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(fpga_sub_ver);
 
-/* Sysfs attributes array */
 static struct attribute *fpga_info_attrs[] = {
 	&dev_attr_fw_ver.attr,
 	&dev_attr_fpga_ver.attr,
@@ -60,20 +55,16 @@ static struct attribute *fpga_info_attrs[] = {
 	NULL,
 };
 
-/* Sysfs attribute group */
 static const struct attribute_group fpga_info_group = {
 	.attrs = fpga_info_attrs,
 };
 
-/* Read FPGA version information */
 static int nh_fpga_info_read_version(struct nh_fpga_info *info)
 {
 	u32 version_reg;
 
-	/* Read version register */
 	version_reg = ioread32(info->base + FPGA_VERSION_REG_OFFSET);
 
-	/* Extract major and minor version */
 	info->fpga_ver = (version_reg & FPGA_VERSION_MAJOR_MASK) >>
 			 FPGA_VERSION_MAJOR_SHIFT;
 	info->fpga_sub_ver = (version_reg & FPGA_VERSION_MINOR_MASK) >>
@@ -85,7 +76,6 @@ static int nh_fpga_info_read_version(struct nh_fpga_info *info)
 	return 0;
 }
 
-/* Auxiliary device probe function */
 static int nh_fpga_info_probe(struct auxiliary_device *aux_dev,
 			      const struct auxiliary_device_id *id)
 {
@@ -95,7 +85,6 @@ static int nh_fpga_info_probe(struct auxiliary_device *aux_dev,
 
 	fpga_aux_dev = container_of(aux_dev, struct nh_fpga_aux_dev, aux_dev);
 
-	/* Allocate info structure */
 	info = devm_kzalloc(&aux_dev->dev, sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
@@ -103,7 +92,6 @@ static int nh_fpga_info_probe(struct auxiliary_device *aux_dev,
 	info->aux_dev = aux_dev;
 	info->base = fpga_aux_dev->csr_base;
 
-	/* Read FPGA version information */
 	ret = nh_fpga_info_read_version(info);
 	if (ret) {
 		dev_err(&aux_dev->dev, "Failed to read FPGA version: %d\n",
@@ -111,7 +99,6 @@ static int nh_fpga_info_probe(struct auxiliary_device *aux_dev,
 		return ret;
 	}
 
-	/* Create sysfs attributes */
 	ret = devm_device_add_group(&aux_dev->dev, &fpga_info_group);
 	if (ret) {
 		dev_err(&aux_dev->dev,
@@ -119,24 +106,20 @@ static int nh_fpga_info_probe(struct auxiliary_device *aux_dev,
 		return ret;
 	}
 
-	/* Store info in auxiliary device data */
 	auxiliary_set_drvdata(aux_dev, info);
 
 	dev_info(&aux_dev->dev, "NH FPGA info driver registered\n");
 	return 0;
 }
 
-/* Auxiliary device remove function */
 static void nh_fpga_info_remove(struct auxiliary_device *aux_dev)
 {
-	/* Clear auxiliary device data to prevent further access */
 	auxiliary_set_drvdata(aux_dev, NULL);
 
 	/* With devm_device_add_groups(), attributes are automatically removed */
 	dev_info(&aux_dev->dev, "NH FPGA info driver removed\n");
 }
 
-/* Auxiliary device ID table */
 static const struct auxiliary_device_id nh_fpga_info_aux_id_table[] = {
 	{
 		.name = "fbiob_pci.fpga_info_iob",
@@ -151,7 +134,6 @@ static const struct auxiliary_device_id nh_fpga_info_aux_id_table[] = {
 };
 MODULE_DEVICE_TABLE(auxiliary, nh_fpga_info_aux_id_table);
 
-/* Auxiliary driver structure */
 static struct auxiliary_driver nh_fpga_info_aux_driver = {
 	.name = DRIVER_NAME,
 	.probe = nh_fpga_info_probe,
@@ -159,7 +141,6 @@ static struct auxiliary_driver nh_fpga_info_aux_driver = {
 	.id_table = nh_fpga_info_aux_id_table,
 };
 
-/* Module initialization */
 static int __init nh_fpga_info_init_module(void)
 {
 	int ret;
@@ -176,7 +157,6 @@ static int __init nh_fpga_info_init_module(void)
 	return 0;
 }
 
-/* Module cleanup */
 static void __exit nh_fpga_info_exit_module(void)
 {
 	pr_info("NH FPGA Info driver unloading\n");

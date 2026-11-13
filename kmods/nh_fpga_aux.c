@@ -43,10 +43,8 @@ int nh_fpga_create_aux_device(struct nh_fpga_pci_dev *fbiob_dev,
 	struct nh_fpga_aux_dev *aux_dev = NULL;
 	int ret = 0;
 
-	/* Lock to protect auxiliary device list access */
 	mutex_lock(&fbiob_dev->lock);
 
-	/* Check if device already exists */
 	list_for_each_entry(aux_dev, &fbiob_dev->aux_dev_list, node) {
 		if (strcmp(aux_dev->dev_info.id.name, dev_info->id.name) == 0 &&
 		    aux_dev->dev_info.id.id == dev_info->id.id) {
@@ -57,21 +55,17 @@ int nh_fpga_create_aux_device(struct nh_fpga_pci_dev *fbiob_dev,
 		}
 	}
 
-	/* Allocate auxiliary device */
 	aux_dev = kzalloc(sizeof(*aux_dev), GFP_KERNEL);
 	if (!aux_dev) {
 		ret = -ENOMEM;
 		goto err_unlock;
 	}
 
-	/* Initialize auxiliary device */
 	aux_dev->parent = fbiob_dev;
 	memcpy(&aux_dev->dev_info, dev_info, sizeof(*dev_info));
 
-	/* Map device registers */
 	aux_dev->csr_base = fbiob_dev->mmio_base + dev_info->csr_offset;
 
-	/* Only map iobuf_base if offset is valid */
 	if (dev_info->iobuf_offset != FBIOB_INVALID_OFFSET) {
 		aux_dev->iobuf_base =
 			fbiob_dev->mmio_base + dev_info->iobuf_offset;
@@ -93,7 +87,6 @@ int nh_fpga_create_aux_device(struct nh_fpga_pci_dev *fbiob_dev,
 		goto err_free;
 	}
 
-	/* Register auxiliary device */
 	ret = auxiliary_device_add(&aux_dev->aux_dev);
 	if (ret) {
 		dev_err(fbiob_dev->dev, "Failed to add auxiliary device: %d\n",
@@ -101,7 +94,6 @@ int nh_fpga_create_aux_device(struct nh_fpga_pci_dev *fbiob_dev,
 		goto err_uninit;
 	}
 
-	/* Add to device list */
 	list_add_tail(&aux_dev->node, &fbiob_dev->aux_dev_list);
 
 	mutex_unlock(&fbiob_dev->lock);
@@ -137,10 +129,8 @@ int nh_fpga_remove_aux_device(struct nh_fpga_pci_dev *fbiob_dev,
 	struct nh_fpga_aux_dev *aux_dev, *tmp;
 	bool found = false;
 
-	/* Lock to protect auxiliary device list access */
 	mutex_lock(&fbiob_dev->lock);
 
-	/* Find and remove the device */
 	list_for_each_entry_safe(aux_dev, tmp, &fbiob_dev->aux_dev_list, node) {
 		if (strcmp(aux_dev->dev_info.id.name, dev_id->name) == 0 &&
 		    aux_dev->dev_info.id.id == dev_id->id) {
@@ -149,7 +139,6 @@ int nh_fpga_remove_aux_device(struct nh_fpga_pci_dev *fbiob_dev,
 			/* Remove from list first to prevent new references */
 			list_del(&aux_dev->node);
 
-			/* Delete and uninitialize the device */
 			auxiliary_device_delete(&aux_dev->aux_dev);
 			auxiliary_device_uninit(&aux_dev->aux_dev);
 

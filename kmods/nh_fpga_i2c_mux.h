@@ -14,8 +14,8 @@ struct pci_dev;
  * This is passed to the custom FPGA mux driver via platform_data
  */
 struct fpga_mux_platform_data {
-	void __iomem *mux_reg; /* FPGA mux control register */
-	int num_channels; /* Number of mux channels */
+	void __iomem *mux_reg;
+	int num_channels;
 	struct pci_dev *pdev; /* FPGA owning the parent master */
 	u8 logical_master; /* mux_config.logical_master of the parent */
 };
@@ -25,9 +25,7 @@ struct fpga_mux_platform_data {
  * parent master's logical index.
  *
  * Deliberately not addressed by adapter name: the "#N" in the name is the
- * auxiliary device id, which platform_manager assigns dynamically, and the
- * rest of the name has already changed shape once. Neither is under this
- * driver's control.
+ * auxiliary device id, which platform_manager assigns dynamically.
  *
  * Returns the i2c_transfer() result, or -ENODEV if no such channel is
  * registered.

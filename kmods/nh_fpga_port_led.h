@@ -40,8 +40,7 @@ struct port_led_ctrl {
 	struct mutex *reg_lock; /* Parent FPGA's LED register RMW lock */
 	struct port_led_dev *leds;
 	u32 num_leds;
-	const struct nh_platform_cfg
-		*platform_cfg; /* Per-device platform descriptor */
+	const struct nh_platform_cfg *platform_cfg;
 };
 
 /*
@@ -50,15 +49,6 @@ struct port_led_ctrl {
  * register, starting at bit `(port_num - start_port) * bits_per_port`.
  * Within those per-port bits, the color whose entry this range belongs to
  * lives at sub-offset @color_bit_offset.
- *
- * Single-bit-per-port designs set `bits_per_port = 1` and
- * `color_bit_offset = 0`, which collapses to the simple math
- * `bit = port_num - start_port`.
- *
- * Multi-bit-per-port designs (e.g., 8 ports × 4 bits per port) set
- * `bits_per_port` to the field width and place each color at a different
- * `color_bit_offset` within each port's field. Both colors then point at
- * the same register offset.
  */
 struct port_led_range {
 	u32 start_port;

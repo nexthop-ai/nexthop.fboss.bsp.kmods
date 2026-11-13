@@ -113,8 +113,7 @@ static const struct nh_led_core_config m4062nhp_fpga0_led_config = {
  *
  * FPGA0 has a single "I2C Mux Select" register at offset 0x0010 whose
  * bits [1:0] select the channel for i2c master 0 (4 outgoing buses to
- * PSU1..PSU4 EEPROM/MCU pairs). nh_fpga_mux writes the channel index
- * into bits [1:0] of this register, matching the layout.
+ * PSU1..PSU4 EEPROM/MCU pairs).
  * ============================================================================ */
 
 static const struct mux_config m4062nhp_fpga0_mux[] = {
@@ -174,9 +173,7 @@ static const struct asic_temp_config m4062nhp_fpga0_asic_temp = {
  * PSU presence — FPGA0
  *
  * Register 0x002c contains one active-low presence bit per PSU
- * (0 = present). present_reg_offset is relative to the psu_present
- * aux device's CSR base from fpgaIpBlockConfig.csrOffset in
- * platform_manager.json.
+ * (0 = present).
  * ============================================================================ */
 static const u32 m4062nhp_fpga0_psu_masks[] = {
 	BIT(9), /* PSU1 */

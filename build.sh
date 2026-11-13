@@ -7,7 +7,6 @@
 
 set -e
 
-# Determine the make target
 MAKE_TARGET="$1"
 if [ "$MAKE_TARGET" = "clean" ]; then
     echo "Running make clean..."

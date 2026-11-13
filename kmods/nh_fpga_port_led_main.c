@@ -28,7 +28,6 @@ static u32 port_led_id_for_num(const struct nh_platform_cfg *cfg, u32 num)
 	return cfg->led_to_id[num];
 }
 
-/* Get bit position and offset for port */
 static int
 nh_port_led_get_bit_and_offset(const struct port_led_color_addr *color_table,
 			       enum port_led_color color, u32 port_num,
@@ -231,7 +230,6 @@ static int nh_port_led_probe(struct auxiliary_device *aux_dev,
 	return 0;
 }
 
-/* Auxiliary device remove function */
 static void nh_port_led_remove(struct auxiliary_device *aux_dev)
 {
 	struct port_led_ctrl *ctrl = auxiliary_get_drvdata(aux_dev);

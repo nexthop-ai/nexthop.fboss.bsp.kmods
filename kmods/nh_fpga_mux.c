@@ -16,7 +16,6 @@
 #define DRIVER_NAME "nh_fpga_mux"
 #define DRIVER_VERSION "1.0"
 
-/* FPGA mux device structure */
 struct fpga_mux {
 	struct i2c_mux_core *muxc;
 	void __iomem *mux_reg;
@@ -62,14 +61,11 @@ int nh_fpga_mux_channel_xfer(struct pci_dev *pdev, u8 logical_master,
 }
 EXPORT_SYMBOL_GPL(nh_fpga_mux_channel_xfer);
 
-/* Mux select function - writes to FPGA register */
 static int fpga_mux_select(struct i2c_mux_core *muxc, u32 chan)
 {
 	struct fpga_mux *mux = i2c_mux_priv(muxc);
 
-	/* Write channel selection to the FPGA mux register. Probe allows up
-	 * to 8 channels, so the select field is 3 bits; the old 2-bit mask
-	 * silently aliased channel 4 onto channel 0 (cf2 has 5). */
+	/* Probe allows up to 8 channels, so the select field is 3 bits. */
 	iowrite32(chan & 0x7, mux->mux_reg);
 
 	dev_dbg(&muxc->parent->dev, "FPGA mux selected channel %u\n", chan);
@@ -79,11 +75,9 @@ static int fpga_mux_select(struct i2c_mux_core *muxc, u32 chan)
 /* Mux deselect function - optional, no action needed for this FPGA */
 static int fpga_mux_deselect(struct i2c_mux_core *muxc, u32 chan)
 {
-	/* No deselect action needed for this FPGA */
 	return 0;
 }
 
-/* I2C device probe function */
 static int fpga_mux_probe(struct i2c_client *client)
 {
 	struct fpga_mux_platform_data *pdata = dev_get_platdata(&client->dev);
@@ -106,7 +100,6 @@ static int fpga_mux_probe(struct i2c_client *client)
 		return -EINVAL;
 	}
 
-	/* Allocate mux structure */
 	mux = devm_kzalloc(&client->dev, sizeof(*mux), GFP_KERNEL);
 	if (!mux)
 		return -ENOMEM;
@@ -163,7 +156,6 @@ static int fpga_mux_probe(struct i2c_client *client)
 			snprintf(channel_name, sizeof(channel_name),
 				 "channel-%d", i);
 
-			/* Remove existing symlink if it exists */
 			sysfs_remove_link(&client->dev.kobj, channel_name);
 
 			ret = sysfs_create_link(&client->dev.kobj,
@@ -198,7 +190,6 @@ static int fpga_mux_probe(struct i2c_client *client)
 	return 0;
 }
 
-/* I2C device remove function */
 static void fpga_mux_remove(struct i2c_client *client)
 {
 	struct fpga_mux *mux;
@@ -231,16 +222,13 @@ static void fpga_mux_remove(struct i2c_client *client)
 			sysfs_remove_link(&client->dev.kobj, channel_name);
 		}
 
-		/* Remove mux adapters */
 		i2c_mux_del_adapters(mux->muxc);
 	}
 }
 
-/* I2C device ID table */
 static const struct i2c_device_id fpga_mux_id[] = { { "fpga-mux", 0 }, {} };
 MODULE_DEVICE_TABLE(i2c, fpga_mux_id);
 
-/* I2C driver structure */
 static struct i2c_driver fpga_mux_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
@@ -250,7 +238,6 @@ static struct i2c_driver fpga_mux_driver = {
 	.id_table = fpga_mux_id,
 };
 
-/* Module initialization */
 static int __init fpga_mux_init(void)
 {
 	int ret;
@@ -267,7 +254,6 @@ static int __init fpga_mux_init(void)
 	return 0;
 }
 
-/* Module cleanup */
 static void __exit fpga_mux_exit(void)
 {
 	pr_info("NH FPGA Mux driver unloading\n");

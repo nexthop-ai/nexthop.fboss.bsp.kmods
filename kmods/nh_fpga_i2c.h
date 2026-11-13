@@ -15,9 +15,8 @@
 struct nh_fpga_i2c {
 	struct auxiliary_device *aux_dev;
 
-	/* i2c mux support */
 	struct i2c_client *mux_client; /* fpga-mux client on the master adapter */
-	void __iomem *mux_reg; /* FPGA mux control register */
+	void __iomem *mux_reg;
 	int num_mux_channels; /* Number of mux channels (0 = no mux) */
 	struct fpga_mux_platform_data mux_pdata; /* passed to nh_fpga_mux */
 
@@ -29,7 +28,6 @@ struct nh_fpga_i2c {
 	int master_bus_num;
 };
 
-/* Function prototypes */
 int nh_fpga_i2c_probe(struct auxiliary_device *aux_dev,
 		      const struct auxiliary_device_id *id);
 void nh_fpga_i2c_remove(struct auxiliary_device *aux_dev);

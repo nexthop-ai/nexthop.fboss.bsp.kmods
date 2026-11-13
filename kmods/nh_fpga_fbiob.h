@@ -17,7 +17,6 @@ struct regmap_irq_chip_data;
 struct clk_hw;
 struct nh_fpga_irq_cfg;
 
-/* Auxiliary device structure */
 struct nh_fpga_aux_dev {
 	struct auxiliary_device aux_dev;
 	struct nh_fpga_pci_dev *parent;
@@ -27,18 +26,17 @@ struct nh_fpga_aux_dev {
 	struct list_head node; /* For linking in the aux_dev_list */
 };
 
-/* PCI device structure */
 struct nh_fpga_pci_dev {
 	struct pci_dev *pdev;
-	void __iomem *mmio_base; /**< Mapped MMIO base address */
-	resource_size_t mmio_len; /**< Length of MMIO region */
-	struct cdev cdev; /**< Character device structure */
-	struct device *dev; /**< Device instance */
-	struct mutex lock; /**< Device lock */
+	void __iomem *mmio_base;
+	resource_size_t mmio_len;
+	struct cdev cdev;
+	struct device *dev;
+	struct mutex lock;
 	struct mutex
 		led_reg_lock; /**< LED register RMW lock, shared by the LED drivers */
-	int minor; /**< Minor number */
-	struct list_head aux_dev_list; /**< List of auxiliary devices */
+	int minor;
+	struct list_head aux_dev_list;
 
 	/* Interrupt-driven I2C plumbing (see nh_fpga_irq.c); devm-managed. */
 	const struct nh_fpga_irq_cfg *irq_cfg;
@@ -48,7 +46,6 @@ struct nh_fpga_pci_dev {
 	struct clk_hw *ref_clk_hw; /**< AXI IIC reference clock */
 };
 
-/* Function prototypes for auxiliary device management */
 int nh_fpga_create_aux_device(struct nh_fpga_pci_dev *fbiob_dev,
 			      struct fbiob_aux_data *dev_info);
 int nh_fpga_remove_aux_device(struct nh_fpga_pci_dev *fbiob_dev,

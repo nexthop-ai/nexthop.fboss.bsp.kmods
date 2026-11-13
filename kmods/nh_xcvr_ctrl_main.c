@@ -45,22 +45,18 @@ u32 xcvr_ctrl_slot_for_port(const struct xcvr_ctrl_config *cfg, u32 port_num)
 	return cfg->id_to_slot[port_num];
 }
 
-/* Read transceiver control register */
 static int nh_xcvr_ctrl_read_reg(struct nh_xcvr_ctrl *ctrl, u32 offset, u32 bit)
 {
 	u32 reg_value;
 	u32 bit_mask;
 
-	/* Read register */
 	reg_value = ioread32(ctrl->base + offset);
 
-	/* Extract bit for this port/signal */
 	bit_mask = 1U << bit;
 
 	return (reg_value & bit_mask) ? 1 : 0;
 }
 
-/* Write transceiver control register */
 static void nh_xcvr_ctrl_write_reg(struct nh_xcvr_ctrl *ctrl, u32 offset,
 				   u32 bit, int value)
 {
@@ -69,10 +65,8 @@ static void nh_xcvr_ctrl_write_reg(struct nh_xcvr_ctrl *ctrl, u32 offset,
 
 	mutex_lock(&xcvr_reg_lock);
 
-	/* Read current register value */
 	reg_value = ioread32(ctrl->base + offset);
 
-	/* Modify bit for this port/signal */
 	bit_mask = 1U << bit;
 
 	if (value)
@@ -80,13 +74,11 @@ static void nh_xcvr_ctrl_write_reg(struct nh_xcvr_ctrl *ctrl, u32 offset,
 	else
 		reg_value &= ~bit_mask;
 
-	/* Write back */
 	iowrite32(reg_value, ctrl->base + offset);
 
 	mutex_unlock(&xcvr_reg_lock);
 }
 
-/* Sysfs attribute: xcvr_reset_%d */
 static ssize_t xcvr_reset_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
@@ -120,7 +112,6 @@ static ssize_t xcvr_reset_store(struct device *dev,
 	return count;
 }
 
-/* Sysfs attribute: xcvr_low_power_%d */
 static ssize_t xcvr_low_power_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
@@ -156,21 +147,18 @@ static ssize_t xcvr_low_power_store(struct device *dev,
 	return count;
 }
 
-/* Sysfs attribute: xcvr_present_%d */
 static ssize_t xcvr_present_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)
 {
 	struct nh_xcvr_ctrl *ctrl = dev_get_drvdata(dev);
 
-	/* We could reverse the presence bit with !nh_xcvr_ctrl_read_reg
-	so we do not need to modify presentHoldHi but it would not match the raw hardware value */
+	/* Report the raw hardware bit. */
 	return sysfs_emit(buf, "%u\n",
 			  nh_xcvr_ctrl_read_reg(ctrl,
 						ctrl->group->present_reg_offset,
 						ctrl->present_bit));
 }
 
-/* Create sysfs attributes for transceiver control */
 static int nh_xcvr_ctrl_create_attrs(struct device *dev, u32 port_num)
 {
 	struct device_attribute *reset_attr, *lpmode_attr, *present_attr;
@@ -178,7 +166,6 @@ static int nh_xcvr_ctrl_create_attrs(struct device *dev, u32 port_num)
 	struct attribute_group *group;
 	struct attribute **attrs;
 
-	/* Create attribute names */
 	reset_name = devm_kasprintf(dev, GFP_KERNEL, "xcvr_reset_%u", port_num);
 	lpmode_name =
 		devm_kasprintf(dev, GFP_KERNEL, "xcvr_low_power_%u", port_num);
@@ -187,7 +174,6 @@ static int nh_xcvr_ctrl_create_attrs(struct device *dev, u32 port_num)
 	if (!reset_name || !lpmode_name || !present_name)
 		return -ENOMEM;
 
-	/* Allocate attributes */
 	reset_attr = devm_kzalloc(dev, sizeof(*reset_attr), GFP_KERNEL);
 	lpmode_attr = devm_kzalloc(dev, sizeof(*lpmode_attr), GFP_KERNEL);
 	present_attr = devm_kzalloc(dev, sizeof(*present_attr), GFP_KERNEL);
@@ -196,21 +182,18 @@ static int nh_xcvr_ctrl_create_attrs(struct device *dev, u32 port_num)
 	if (!reset_attr || !lpmode_attr || !present_attr || !attrs || !group)
 		return -ENOMEM;
 
-	/* Setup reset attribute */
 	reset_attr->attr.name = reset_name;
 	reset_attr->attr.mode = 0644;
 	reset_attr->show = xcvr_reset_show;
 	reset_attr->store = xcvr_reset_store;
 	sysfs_attr_init(&reset_attr->attr);
 
-	/* Setup low power attribute */
 	lpmode_attr->attr.name = lpmode_name;
 	lpmode_attr->attr.mode = 0644;
 	lpmode_attr->show = xcvr_low_power_show;
 	lpmode_attr->store = xcvr_low_power_store;
 	sysfs_attr_init(&lpmode_attr->attr);
 
-	/* Setup present attribute */
 	present_attr->attr.name = present_name;
 	present_attr->attr.mode = 0444;
 	present_attr->show = xcvr_present_show;
@@ -228,7 +211,6 @@ static int nh_xcvr_ctrl_create_attrs(struct device *dev, u32 port_num)
 	return devm_device_add_group(dev, group);
 }
 
-/* Auxiliary device probe function */
 static int nh_xcvr_ctrl_probe(struct auxiliary_device *aux_dev,
 			      const struct auxiliary_device_id *id)
 {
@@ -274,7 +256,6 @@ static int nh_xcvr_ctrl_probe(struct auxiliary_device *aux_dev,
 		}
 	}
 
-	/* Allocate ctrl structure */
 	ctrl = devm_kzalloc(&aux_dev->dev, sizeof(*ctrl), GFP_KERNEL);
 	if (!ctrl)
 		return -ENOMEM;
@@ -312,7 +293,6 @@ static int nh_xcvr_ctrl_probe(struct auxiliary_device *aux_dev,
 		ctrl->present_bit = bit_pos;
 	}
 
-	/* Create sysfs attributes */
 	ret = nh_xcvr_ctrl_create_attrs(&aux_dev->dev, ctrl->port_num);
 	if (ret) {
 		dev_err(&aux_dev->dev,
@@ -320,14 +300,12 @@ static int nh_xcvr_ctrl_probe(struct auxiliary_device *aux_dev,
 		return ret;
 	}
 
-	/* Store ctrl in auxiliary device data */
 	auxiliary_set_drvdata(aux_dev, ctrl);
 
 	dev_info(&aux_dev->dev, "NH xcvr ctrl driver registered\n");
 	return 0;
 }
 
-/* Auxiliary device remove function */
 static void nh_xcvr_ctrl_remove(struct auxiliary_device *aux_dev)
 {
 	/* Attributes were added with devm_device_add_group() and are
@@ -335,7 +313,6 @@ static void nh_xcvr_ctrl_remove(struct auxiliary_device *aux_dev)
 	dev_info(&aux_dev->dev, "NH xcvr ctrl driver removed\n");
 }
 
-/* Auxiliary device ID table */
 static const struct auxiliary_device_id nh_xcvr_ctrl_aux_id_table[] = {
 	{
 		.name = "fbiob_pci.xcvr_ctrl",
@@ -344,7 +321,6 @@ static const struct auxiliary_device_id nh_xcvr_ctrl_aux_id_table[] = {
 };
 MODULE_DEVICE_TABLE(auxiliary, nh_xcvr_ctrl_aux_id_table);
 
-/* Auxiliary driver structure */
 static struct auxiliary_driver nh_xcvr_ctrl_aux_driver = {
 	.name = DRIVER_NAME,
 	.probe = nh_xcvr_ctrl_probe,
@@ -352,7 +328,6 @@ static struct auxiliary_driver nh_xcvr_ctrl_aux_driver = {
 	.id_table = nh_xcvr_ctrl_aux_id_table,
 };
 
-/* Module initialization */
 static int __init nh_xcvr_ctrl_init_module(void)
 {
 	int ret;
@@ -369,7 +344,6 @@ static int __init nh_xcvr_ctrl_init_module(void)
 	return 0;
 }
 
-/* Module cleanup */
 static void __exit nh_xcvr_ctrl_exit_module(void)
 {
 	pr_info("NH XCVR Ctrl driver unloading\n");
