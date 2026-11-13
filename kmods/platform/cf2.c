@@ -27,11 +27,35 @@ static const struct nh_fpga_irq_cfg cf2_irq_cfg = {
 	.min_fpga_version = 0x01,
 };
 
+static const struct nh_flash_sel_layout cf2_flash_sel_layouts[] = {
+	/* 24-bit chain, dual-FPGA switch card: 0 = FPGA0 flash, 1 = FPGA1 */
+	{ .chain_type = 0x1,
+	  .grab_bit = 19,
+	  .sel_bit = 18,
+	  .sel_name = "flash_sel",
+	  .reload_bit = 16 },
+	/* 16-bit chain, single-FPGA switch card: 0 = SPI, 1 = JTAG */
+	{ .chain_type = 0x2,
+	  .grab_bit = 11,
+	  .sel_bit = 10,
+	  .sel_name = "jtag_spi_sel",
+	  .reload_bit = 8 },
+};
+
+static const struct nh_flash_sel_cfg cf2_flash_sel_cfg = {
+	.spi_enable_reg = 0x0004,
+	.spi_enable_bit = 0,
+	.sh0_reg = 0x0044,
+	.layouts = cf2_flash_sel_layouts,
+	.num_layouts = ARRAY_SIZE(cf2_flash_sel_layouts),
+};
+
 const struct nh_platform_cfg nh_platform_cf2 = {
 	.device_id = NH_FPGA_DEVICE_CF2,
 	.name = "CF2",
 	.mux_cfg = cf2_mux,
 	.mux_count = ARRAY_SIZE(cf2_mux),
 	.irq_cfg = &cf2_irq_cfg,
+	.flash_sel_cfg = &cf2_flash_sel_cfg,
 	/* led, fan, port_led, xcvr: NULL/0 — not present on this platform */
 };

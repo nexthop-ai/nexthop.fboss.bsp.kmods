@@ -3,6 +3,7 @@
       "nh_fpga_psu",
       "nh_fpga_mux",
       "nh_fpga_i2c",
+      "nh_fpga_spi",
       "bp4f_i2c_xiic",
       "fbiob_pci",
       "nh_fpga_info",
@@ -10,6 +11,7 @@
       "nh_fpga_fan",
       "nh_fpga_led",
       "nh_fpga_port_led",
+      "nh_fpga_flash_sel",
       "nh_xcvr_ctrl"
     ],
     "sharedKmods": []

@@ -5,7 +5,7 @@
 
 ifneq ($(KERNELRELEASE),)
     # This executes when kernel's build system calls this Makefile
-    obj-m := fbiob_pci.o backports/bp4f_i2c_xiic.o nh_fpga_i2c.o nh_fpga_mux.o nh_fpga_info.o nh_fpga_asic_temp.o nh_fpga_fan.o nh_xcvr_ctrl.o nh_fpga_led.o nh_fpga_port_led.o nh_fpga_psu.o
+    obj-m := fbiob_pci.o backports/bp4f_i2c_xiic.o nh_fpga_i2c.o nh_fpga_spi.o nh_fpga_flash_sel.o nh_fpga_mux.o nh_fpga_info.o nh_fpga_asic_temp.o nh_fpga_fan.o nh_xcvr_ctrl.o nh_fpga_led.o nh_fpga_port_led.o nh_fpga_psu.o
 
     # Shared platform objects linked into each module that uses per-platform data.
     # Per-SKU objects (platform/<sku>.o) are appended by each platform integration.
@@ -23,6 +23,8 @@ ifneq ($(KERNELRELEASE),)
 
     nh_fpga_i2c-objs := nh_fpga_i2c_main.o \
                         $(nh_platform_objs)
+
+    nh_fpga_flash_sel-objs := nh_fpga_flash_sel_main.o $(nh_platform_objs)
 
     # nh_fpga_mux.ko is a single-file module, no -objs needed
 
