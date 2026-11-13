@@ -24,8 +24,8 @@ enum m4062nhp_fpga0_led_color {
 	M4062NHP_LED_NUM_COLORS
 };
 
-static const char
-	*const m4062nhp_fpga0_led_color_names[M4062NHP_LED_NUM_COLORS] = {
+static const char *const
+	m4062nhp_fpga0_led_color_names[M4062NHP_LED_NUM_COLORS] = {
 		[M4062NHP_LED_COLOR_FAIL] = "amber",
 		[M4062NHP_LED_COLOR_GOOD] = "blue",
 	};

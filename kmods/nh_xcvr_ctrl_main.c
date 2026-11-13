@@ -293,11 +293,6 @@ static int nh_xcvr_ctrl_probe(struct auxiliary_device *aux_dev,
 		ctrl->present_bit = bit_pos;
 	}
 
-<<<<<<< HEAD
-=======
-	auxiliary_set_drvdata(aux_dev, ctrl);
-
->>>>>>> 670a4d6 (NO-NOS: Remove unnecessary comments from Nexthop BSP (#174))
 	ret = nh_xcvr_ctrl_create_attrs(&aux_dev->dev, ctrl->port_num);
 	if (ret) {
 		dev_err(&aux_dev->dev,
