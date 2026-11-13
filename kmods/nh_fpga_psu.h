@@ -52,12 +52,17 @@ struct psu_fw_cfg {
  *
  * active_low: when true the hardware bit reads 0 for "present", so the driver
  * inverts it before reporting.
+ *
+ * vin_ok_masks / pwr_ok_masks: optional, active high. Add psu<N>_vin_ok /
+ * psu<N>_pwr_ok, and psu<N>_ok (present && vin_ok && pwr_ok) when both set.
  */
 struct psu_present_cfg {
 	u32 present_reg_offset;
 	u8 num_psus;
 	bool active_low;
 	const u32 *present_masks;
+	const u32 *vin_ok_masks;
+	const u32 *pwr_ok_masks;
 	const struct psu_fw_cfg *fw_cfg;
 };
 

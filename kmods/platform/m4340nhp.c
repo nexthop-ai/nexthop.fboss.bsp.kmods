@@ -285,11 +285,11 @@ static const struct mux_config m4340nhp_mux[] = {
 };
 
 /* ============================================================================
- * PSU presence
+ * PSU presence and input / power-good status
  *
  * PDC Status (the aux device's csrOffset, 0x002C) carries four bits per
- * PSU slot 0-3 — VINOK, PWOK, PRES_L, SMBALERT_L — so PRES_L sits at bit
- * 4*slot + 2.
+ * PSU slot 0-3 — VINOK, PWOK, PRES_L, SMBALERT_L — so VINOK, PWOK and
+ * PRES_L sit at bits 4*slot, 4*slot + 1 and 4*slot + 2.
  *
  * The chassis labels count the other way: label PSU1 is PDC slot 3 (J4)
  * and label PSU4 is slot 0 (J1). PSU numbering here follows the labels.
@@ -301,6 +301,27 @@ static const u32 m4340nhp_psu_masks[] = {
 	BIT(6), /* PSU3 */
 	BIT(2), /* PSU4 */
 };
+
+static const u32 m4340nhp_psu_vin_ok_masks[] = {
+	BIT(12), /* PSU1 */
+	BIT(8), /* PSU2 */
+	BIT(4), /* PSU3 */
+	BIT(0), /* PSU4 */
+};
+
+static const u32 m4340nhp_psu_pwr_ok_masks[] = {
+	BIT(13), /* PSU1 */
+	BIT(9), /* PSU2 */
+	BIT(5), /* PSU3 */
+	BIT(1), /* PSU4 */
+};
+
+static_assert(ARRAY_SIZE(m4340nhp_psu_vin_ok_masks) ==
+		      ARRAY_SIZE(m4340nhp_psu_masks),
+	      "one VINOK bit per PSU slot");
+static_assert(ARRAY_SIZE(m4340nhp_psu_pwr_ok_masks) ==
+		      ARRAY_SIZE(m4340nhp_psu_masks),
+	      "one PWOK bit per PSU slot");
 
 /*
  * PSU firmware version. Each PSU hangs off its own channel of the PDC mux
@@ -336,6 +357,8 @@ static const struct psu_present_cfg m4340nhp_psu = {
 	.num_psus = ARRAY_SIZE(m4340nhp_psu_masks),
 	.active_low = true,
 	.present_masks = m4340nhp_psu_masks,
+	.vin_ok_masks = m4340nhp_psu_vin_ok_masks,
+	.pwr_ok_masks = m4340nhp_psu_pwr_ok_masks,
 	.fw_cfg = &m4340nhp_psu_fw,
 };
 
