@@ -86,8 +86,18 @@ static const struct nh_led_core_config m4061nhp_led_config = {
 /* ============================================================================
  * Fan
  *
+<<<<<<< HEAD
  * Five dual-rotor trays. Tray 5 tach at 0x00C4 needs switch-card FPGA
  * 0x0404 or later.
+=======
+ * Five dual-rotor trays. Per-tray PWM (0x0240..0x0250) and tach
+ * (0x00B4..0x00C4) are separate registers; tach period is [15:0] inner /
+ * [31:16] outer. The tray 5 tach at 0x00C4 needs switch-card FPGA 0x0404
+ * or later. Trays 1-3 report ID/power-good in status register 0x00A4,
+ * trays 4-5 in 0x00A8. The status registers carry no tach-ok bits, so
+ * inner_tach/outer_tach are 0. Fan Card Control @ 0x00A0 holds a
+ * fail/good LED bit pair per tray at bits 2*(tray-1) / 2*(tray-1)+1.
+>>>>>>> 670a4d6 (NO-NOS: Remove unnecessary comments from Nexthop BSP (#174))
  * ============================================================================
  */
 
@@ -260,6 +270,15 @@ static const struct xcvr_ctrl_config m4061nhp_xcvr = {
  * Masters 0, 1, 3 and 4 each drive a 1-of-4 mux, select registers at
  * 0x0010 / 0x0014 / 0x0018 / 0x001C (bits 1:0). Master 2 is the TH6 BSC
  * and has no mux.
+<<<<<<< HEAD
+=======
+ *
+ * Master 3's mux is U18 on the MGMT card, and only its first two channels
+ * reach anything this platform uses (temp sensor + IDPROM, then the QSFP28
+ * mgmt cage). Channel 2 is unconnected and channel 3 is the SFP flyover,
+ * whose pull-ups sit on a rail nothing here powers, so a transfer there
+ * hangs.
+>>>>>>> 670a4d6 (NO-NOS: Remove unnecessary comments from Nexthop BSP (#174))
  * ============================================================================
  */
 
