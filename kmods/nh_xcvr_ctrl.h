@@ -30,6 +30,12 @@ struct xcvr_port_group {
 	u32 reset_bit;
 	u32 lp_mode_bit;
 	u32 present_bit;
+	/* Cage power enable and power good; power_reg_offset 0 means none.
+	 * Reset is not released, nor LPMode set, until power is good. */
+	u32 power_reg_offset;
+	u32 power_bit;
+	u32 pgood_reg_offset;
+	u32 pgood_bit;
 	/* Reset bit is active-high (e.g. an SFP's TX_DISABLE): invert so
 	 * xcvr_reset keeps the platform-wide active-low convention. */
 	bool reset_active_high;

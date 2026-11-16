@@ -5,6 +5,7 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/sysfs.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/mutex.h>
 #include <linux/pci.h>
 #include "nh_fpga_fbiob.h"
@@ -13,6 +14,11 @@
 
 #define DRIVER_NAME "nh_xcvr_ctrl"
 #define DRIVER_VERSION "1.0"
+
+#define XCVR_PGOOD_POLL_US 10000
+#define XCVR_PGOOD_TIMEOUT_US (2 * USEC_PER_SEC)
+/* Shorter bound for a sysfs write: the caller is blocked while it polls. */
+#define XCVR_PWR_GATE_TIMEOUT_US (500 * USEC_PER_MSEC)
 
 /* Multiple ports share each control register; one lock serializes RMW
  * across all xcvr port devices. */
@@ -79,6 +85,76 @@ static void nh_xcvr_ctrl_write_reg(struct nh_xcvr_ctrl *ctrl, u32 offset,
 	mutex_unlock(&xcvr_reg_lock);
 }
 
+static bool nh_xcvr_ctrl_power_good(struct nh_xcvr_ctrl *ctrl)
+{
+	const struct xcvr_port_group *g = ctrl->group;
+
+	return nh_xcvr_ctrl_read_reg(ctrl, g->power_reg_offset, g->power_bit) &&
+	       nh_xcvr_ctrl_read_reg(ctrl, g->pgood_reg_offset, g->pgood_bit);
+}
+
+/* Offset 0 is the verification-string register, so it never holds a power
+ * control bit; a zero offset means the group has no cage power control. */
+static bool nh_xcvr_ctrl_has_power_control(const struct xcvr_port_group *group)
+{
+	return group->power_reg_offset != 0 && group->pgood_reg_offset != 0;
+}
+
+/* Hold the module in reset, enable cage power, wait for power good, then
+ * release reset. A timeout leaves the module in reset without failing probe. */
+static void nh_xcvr_ctrl_power_on(struct nh_xcvr_ctrl *ctrl)
+{
+	const struct xcvr_port_group *g = ctrl->group;
+	bool ok;
+
+	/* Do not disturb a module that is already powered and good. */
+	if (nh_xcvr_ctrl_power_good(ctrl))
+		return;
+
+	nh_xcvr_ctrl_write_reg(ctrl, g->reset_reg_offset, ctrl->reset_bit,
+			       g->reset_active_high);
+	nh_xcvr_ctrl_write_reg(ctrl, g->power_reg_offset, g->power_bit, 1);
+
+	if (read_poll_timeout(nh_xcvr_ctrl_power_good, ok, ok,
+			      XCVR_PGOOD_POLL_US, XCVR_PGOOD_TIMEOUT_US, false,
+			      ctrl)) {
+		dev_warn(
+			&ctrl->aux_dev->dev,
+			"port %u: power good not asserted %ld ms after power on, holding reset\n",
+			ctrl->port_num, XCVR_PGOOD_TIMEOUT_US / USEC_PER_MSEC);
+		return;
+	}
+
+	nh_xcvr_ctrl_write_reg(ctrl, g->reset_reg_offset, ctrl->reset_bit,
+			       !g->reset_active_high);
+}
+
+/* @wait_for_power_good is set for writes that bring the module up (releasing
+ * reset, setting LPMode); asserting reset or clearing LPMode never waits. On a
+ * group with cage power control, wait for power good before writing; -EAGAIN,
+ * bit untouched, if it does not come up. */
+static int nh_xcvr_ctrl_write_gated(struct nh_xcvr_ctrl *ctrl, u32 offset,
+				    u32 bit, int value,
+				    bool wait_for_power_good,
+				    const char *action)
+{
+	bool ok;
+
+	if (wait_for_power_good &&
+	    nh_xcvr_ctrl_has_power_control(ctrl->group) &&
+	    read_poll_timeout(nh_xcvr_ctrl_power_good, ok, ok,
+			      XCVR_PGOOD_POLL_US, XCVR_PWR_GATE_TIMEOUT_US,
+			      false, ctrl)) {
+		dev_warn_ratelimited(&ctrl->aux_dev->dev,
+				     "port %u: not %s, cage power not good\n",
+				     ctrl->port_num, action);
+		return -EAGAIN;
+	}
+
+	nh_xcvr_ctrl_write_reg(ctrl, offset, bit, value);
+	return 0;
+}
+
 static ssize_t xcvr_reset_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
@@ -97,18 +173,22 @@ static ssize_t xcvr_reset_store(struct device *dev,
 				size_t count)
 {
 	struct nh_xcvr_ctrl *ctrl = dev_get_drvdata(dev);
+	bool release_reset;
 	int value, ret;
 
 	ret = kstrtoint(buf, 10, &value);
 	if (ret)
 		return ret;
 
-	value = !!value;
-	if (ctrl->group->reset_active_high)
-		value = !value;
+	/* xcvr_reset is active-low: nonzero takes the module out of reset. */
+	release_reset = !!value;
+	value = ctrl->group->reset_active_high ? !release_reset : release_reset;
 
-	nh_xcvr_ctrl_write_reg(ctrl, ctrl->group->reset_reg_offset,
-			       ctrl->reset_bit, value);
+	ret = nh_xcvr_ctrl_write_gated(ctrl, ctrl->group->reset_reg_offset,
+				       ctrl->reset_bit, value, release_reset,
+				       "releasing reset");
+	if (ret)
+		return ret;
 	return count;
 }
 
@@ -136,14 +216,24 @@ static ssize_t xcvr_low_power_store(struct device *dev,
 	ret = kstrtoint(buf, 10, &value);
 	if (ret)
 		return ret;
+	value = !!value;
 
 	if (ctrl->group->no_lp_mode) {
-		ctrl->lp_mode_shadow = !!value;
+		ctrl->lp_mode_shadow = value;
 		return count;
 	}
 
+<<<<<<< HEAD
 	nh_xcvr_ctrl_write_reg(ctrl, ctrl->group->lp_mode_reg_offset,
 			       ctrl->lp_mode_bit, value);
+=======
+	ret = nh_xcvr_ctrl_write_gated(
+		ctrl, ctrl->group->lp_mode_reg_offset, ctrl->lp_mode_bit,
+		ctrl->group->lp_mode_active_low ? !value : value, value,
+		"setting lpmode");
+	if (ret)
+		return ret;
+>>>>>>> 04e3a50 (NOS-16674: [m4062nhp] Power on the mgmt QSFP cage at probe (#134))
 	return count;
 }
 
@@ -253,6 +343,16 @@ static int nh_xcvr_ctrl_probe(struct auxiliary_device *aux_dev,
 					device_id);
 				return -EINVAL;
 			}
+			if (g->power_reg_offset &&
+			    (!g->pgood_reg_offset || g->power_bit >= 32 ||
+			     g->pgood_bit >= 32)) {
+				dev_err(&aux_dev->dev,
+					"xcvr_port_group[%u] power control {pwr 0x%x:%u pgood 0x%x:%u} is malformed on device 0x%04x\n",
+					i, g->power_reg_offset, g->power_bit,
+					g->pgood_reg_offset, g->pgood_bit,
+					device_id);
+				return -EINVAL;
+			}
 		}
 	}
 
@@ -293,6 +393,14 @@ static int nh_xcvr_ctrl_probe(struct auxiliary_device *aux_dev,
 		ctrl->present_bit = bit_pos;
 	}
 
+<<<<<<< HEAD
+=======
+	auxiliary_set_drvdata(aux_dev, ctrl);
+
+	if (nh_xcvr_ctrl_has_power_control(ctrl->group))
+		nh_xcvr_ctrl_power_on(ctrl);
+
+>>>>>>> 04e3a50 (NOS-16674: [m4062nhp] Power on the mgmt QSFP cage at probe (#134))
 	ret = nh_xcvr_ctrl_create_attrs(&aux_dev->dev, ctrl->port_num);
 	if (ret) {
 		dev_err(&aux_dev->dev,

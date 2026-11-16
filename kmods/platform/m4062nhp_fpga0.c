@@ -221,10 +221,11 @@ static const struct psu_present_cfg m4062nhp_fpga0_psu = {
  * Transceiver control — management QSFP (port 129)
  *
  * The mgmt QSFP is a dedicated block on FPGA0, not part of the FPGA1
- * front-panel windows. Its three signals live at fixed bits rather than a
+ * front-panel windows. Its signals live at fixed bits rather than a
  * shared per-port offset:
- *   QSFP Management Card Control @ 0x0088: bit1 reset_l, bit2 lpmode
- *   QSFP Management Card Status  @ 0x008C: bit4 prsnt_l
+ *   QSFP Management Card Control @ 0x0088: bit0 pwr_on, bit1 reset_l,
+ *                                          bit2 lpmode
+ *   QSFP Management Card Status  @ 0x008C: bit3 pgood, bit4 prsnt_l
  * (reset_l / prsnt_l are active-low; polarity is handled in the BSP
  * platform mapping, not here.)
  * ============================================================================ */
@@ -240,6 +241,10 @@ static const struct xcvr_port_group m4062nhp_fpga0_xcvr_groups[] = {
 		.reset_bit = 1,
 		.lp_mode_bit = 2,
 		.present_bit = 4,
+		.power_reg_offset = 0x0088,
+		.power_bit = 0,
+		.pgood_reg_offset = 0x008C,
+		.pgood_bit = 3,
 	},
 };
 
