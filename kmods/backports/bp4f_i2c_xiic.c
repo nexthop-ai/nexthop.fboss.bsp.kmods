@@ -22,6 +22,7 @@
  *  - "i2c: xiic: don't fail a read whose data is already in the RX FIFO",
  *    posted to linux-i2c:
  *    https://lore.kernel.org/linux-i2c/20261005-i2c-xiic-rx-fifo-v1-1-0177ac5f72d7@nexthop.ai/
+ *  - .remove_new renamed to .remove in v6.13
  * Upstream e6fe3ea04f01 ("defer RX_FULL until all trailing bytes are in
  * FIFO") is left out: it ACKs the last byte of a block read and is being
  * reverted upstream.
@@ -1470,7 +1471,7 @@ static const struct dev_pm_ops xiic_dev_pm_ops = {
 
 static struct platform_driver xiic_i2c_driver = {
 	.probe   = xiic_i2c_probe,
-	.remove_new = xiic_i2c_remove,
+	.remove = xiic_i2c_remove,
 	.driver  = {
 		.name = DRIVER_NAME,
 		.of_match_table = of_match_ptr(xiic_of_match),
