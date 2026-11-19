@@ -1,6 +1,6 @@
-# fboss.bsp.nexthop
+# nexthop.fboss.bsp.kmods
 
-Board support package (BSP) code for FBOSS switches developed by Nexthop.
+FBOSS Board Support Package (BSP) for Nexthop systems.
 
 This repository packages the kernel drivers that FBOSS platform software relies
 on, building them into an installable kmods RPM.
@@ -27,14 +27,3 @@ under `/usr/local/nexthop_bsp/<kver>/`.
 `distro_build.sh` is the entry point for the FBOSS distro image build pipeline:
 it installs the build dependencies from the RPM spec, builds the RPM, and stages
 it as a tarball under `/output`.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution process and
-[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
-
-## License
-
-This project is licensed under the GNU General Public License, version 2,
-matching [fboss.bsp.kmods](https://github.com/facebookincubator/fboss.bsp.kmods).
-See [LICENSE](LICENSE) for the full license text.
