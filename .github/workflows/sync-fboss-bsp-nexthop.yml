@@ -1,0 +1,53 @@
+name: Sync to fboss.bsp.nexthop
+
+# Merges this repo's main into facebookincubator/fboss.bsp.nexthop main and
+# pushes it directly. Each sync is a merge commit, so our commits keep their
+# SHAs there and that repo keeps its own README.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-fboss-bsp-nexthop
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # This file is also copied to fboss.bsp.nexthop; only run it here.
+    if: github.repository == 'nexthop-ai/nexthop.fboss.bsp.kmods'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out fboss.bsp.nexthop main
+        uses: actions/checkout@v6
+        with:
+          repository: facebookincubator/fboss.bsp.nexthop
+          ref: main
+          token: ${{ secrets.FBOSS_BSP_SYNC_TOKEN }}
+          fetch-depth: 0
+
+      - name: Merge our main and push
+        run: |
+          set -euo pipefail
+          git config user.name "marif-nexthop"
+          git config user.email "193277486+marif-nexthop@users.noreply.github.com"
+          git fetch --no-tags "https://github.com/${GITHUB_REPOSITORY}.git" main
+          src=$(git rev-parse FETCH_HEAD)
+          if git merge-base --is-ancestor "$src" HEAD; then
+            echo "fboss.bsp.nexthop already has $src"
+            exit 0
+          fi
+          git merge --no-ff --no-commit "$src" || true
+          # fboss.bsp.nexthop keeps its own README.md.
+          git checkout HEAD -- README.md
+          unmerged=$(git diff --name-only --diff-filter=U)
+          if [ -n "$unmerged" ]; then
+            echo "::error::Merge conflicts, sync by hand: $unmerged"
+            exit 1
+          fi
+          git commit -m "Merge nexthop-ai/nexthop.fboss.bsp.kmods@${src:0:10}"
+          git push origin HEAD:main
