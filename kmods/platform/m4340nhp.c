@@ -215,9 +215,12 @@ static const struct port_led_color_addr m4340nhp_port_led[PORT_LED_NUM_COLORS] =
  * is set by the platform manager to the start of its window.
  *
  * Mgmt QSFP28 ports 65/66 are a dedicated block with fixed bits:
- *   QSFP Management Card Control @ 0x0088: QSFP1 rst_l bit 12 / lpmode
- *   bit 14, QSFP2 rst_l bit 8 / lpmode bit 10
- *   QSFP Management Card Status  @ 0x008C: prsnt_l bits 22 / 17
+ *   QSFP Management Card Control @ 0x0088:
+ *     QSFP1 pwr_on bit 13, rst_l bit 12, lpmode bit 14
+ *     QSFP2 pwr_on bit 9,  rst_l bit 8,  lpmode bit 10
+ *   QSFP Management Card Status  @ 0x008C:
+ *     QSFP1 pgood bit 21, prsnt_l bit 22
+ *     QSFP2 pgood bit 16, prsnt_l bit 17
  * Their aux devices use csrOffset 0, so these offsets are absolute.
  * ============================================================================ */
 
@@ -246,6 +249,10 @@ static const struct xcvr_port_group m4340nhp_xcvr_groups[] = {
 		.reset_bit = 12,
 		.lp_mode_bit = 14,
 		.present_bit = 22,
+		.power_reg_offset = 0x0088,
+		.power_bit = 13,
+		.pgood_reg_offset = 0x008C,
+		.pgood_bit = 21,
 	},
 	{
 		.start_port = 66,
@@ -257,6 +264,10 @@ static const struct xcvr_port_group m4340nhp_xcvr_groups[] = {
 		.reset_bit = 8,
 		.lp_mode_bit = 10,
 		.present_bit = 17,
+		.power_reg_offset = 0x0088,
+		.power_bit = 9,
+		.pgood_reg_offset = 0x008C,
+		.pgood_bit = 16,
 	},
 };
 
