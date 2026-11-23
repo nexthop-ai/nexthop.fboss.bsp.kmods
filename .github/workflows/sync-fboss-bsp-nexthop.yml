@@ -27,7 +27,7 @@ jobs:
         with:
           repository: facebookincubator/fboss.bsp.nexthop
           ref: main
-          token: ${{ secrets.FBOSS_BSP_SYNC_TOKEN }}
+          token: ${{ secrets.NEXTHOP_BSP_SYNC_TOKEN }}
           fetch-depth: 0
 
       - name: Merge our main and push
