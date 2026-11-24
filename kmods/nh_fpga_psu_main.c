@@ -103,11 +103,10 @@ static ssize_t psu_present_show(struct device *dev,
 	return sysfs_emit(buf, "%d\n", nh_fpga_psu_is_present(p, idx) ? 1 : 0);
 }
 
-static ssize_t psu_status_bit_show(struct device *dev,
+static ssize_t psu_status_bit_show(struct nh_fpga_psu *p,
 				   struct device_attribute *attr, char *buf,
 				   const u32 *masks)
 {
-	struct nh_fpga_psu *p = dev_get_drvdata(dev);
 	u32 reg;
 	int idx;
 
@@ -124,7 +123,7 @@ static ssize_t psu_vin_ok_show(struct device *dev,
 {
 	struct nh_fpga_psu *p = dev_get_drvdata(dev);
 
-	return psu_status_bit_show(dev, attr, buf, p->cfg->vin_ok_masks);
+	return psu_status_bit_show(p, attr, buf, p->cfg->vin_ok_masks);
 }
 
 static ssize_t psu_pwr_ok_show(struct device *dev,
@@ -132,7 +131,7 @@ static ssize_t psu_pwr_ok_show(struct device *dev,
 {
 	struct nh_fpga_psu *p = dev_get_drvdata(dev);
 
-	return psu_status_bit_show(dev, attr, buf, p->cfg->pwr_ok_masks);
+	return psu_status_bit_show(p, attr, buf, p->cfg->pwr_ok_masks);
 }
 
 /* One register read, so all three bits come from the same sample. */
@@ -267,14 +266,30 @@ static int nh_fpga_psu_probe(struct auxiliary_device *aux_dev,
 	/* Build per-PSU attrs dynamically, no static cap array needed.
 	 * All allocations are devm. */
 	{
+		const struct {
+			const char *suffix;
+			ssize_t (*show)(struct device *dev,
+					struct device_attribute *attr,
+					char *buf);
+			bool enabled;
+		} psu_attrs[] = {
+			{ "present", psu_present_show, true },
+			{ "fw_version", psu_fw_version_show, !!p->cfg->fw_cfg },
+			{ "vin_ok", psu_vin_ok_show, !!p->cfg->vin_ok_masks },
+			{ "pwr_ok", psu_pwr_ok_show, !!p->cfg->pwr_ok_masks },
+			{ "ok", psu_ok_show,
+			  p->cfg->vin_ok_masks && p->cfg->pwr_ok_masks },
+		};
 		struct device_attribute *attrs;
 		struct attribute **attr_ptrs;
-		bool has_ok = p->cfg->vin_ok_masks && p->cfg->pwr_ok_masks;
-		int attrs_per_psu = 1 + !!p->cfg->fw_cfg +
-				    !!p->cfg->vin_ok_masks +
-				    !!p->cfg->pwr_ok_masks + has_ok;
-		int num_attrs = p->cfg->num_psus * attrs_per_psu;
+		int attrs_per_psu = 0;
+		int num_attrs;
 		int attr_idx = 0;
+		size_t j;
+
+		for (j = 0; j < ARRAY_SIZE(psu_attrs); j++)
+			attrs_per_psu += psu_attrs[j].enabled;
+		num_attrs = p->cfg->num_psus * attrs_per_psu;
 
 		attrs = devm_kcalloc(&aux_dev->dev, num_attrs, sizeof(*attrs),
 				     GFP_KERNEL);
@@ -284,52 +299,13 @@ static int nh_fpga_psu_probe(struct auxiliary_device *aux_dev,
 			return -ENOMEM;
 
 		for (i = 0; i < p->cfg->num_psus; i++) {
-			ret = nh_fpga_psu_init_attr(&aux_dev->dev,
-						    &attrs[attr_idx], i + 1,
-						    "present",
-						    psu_present_show);
-			if (ret)
-				return ret;
-			attr_ptrs[attr_idx] = &attrs[attr_idx].attr;
-			attr_idx++;
+			for (j = 0; j < ARRAY_SIZE(psu_attrs); j++) {
+				if (!psu_attrs[j].enabled)
+					continue;
 
-			if (p->cfg->fw_cfg) {
 				ret = nh_fpga_psu_init_attr(
 					&aux_dev->dev, &attrs[attr_idx], i + 1,
-					"fw_version", psu_fw_version_show);
-				if (ret)
-					return ret;
-				attr_ptrs[attr_idx] = &attrs[attr_idx].attr;
-				attr_idx++;
-			}
-
-			if (p->cfg->vin_ok_masks) {
-				ret = nh_fpga_psu_init_attr(&aux_dev->dev,
-							    &attrs[attr_idx],
-							    i + 1, "vin_ok",
-							    psu_vin_ok_show);
-				if (ret)
-					return ret;
-				attr_ptrs[attr_idx] = &attrs[attr_idx].attr;
-				attr_idx++;
-			}
-
-			if (p->cfg->pwr_ok_masks) {
-				ret = nh_fpga_psu_init_attr(&aux_dev->dev,
-							    &attrs[attr_idx],
-							    i + 1, "pwr_ok",
-							    psu_pwr_ok_show);
-				if (ret)
-					return ret;
-				attr_ptrs[attr_idx] = &attrs[attr_idx].attr;
-				attr_idx++;
-			}
-
-			if (has_ok) {
-				ret = nh_fpga_psu_init_attr(&aux_dev->dev,
-							    &attrs[attr_idx],
-							    i + 1, "ok",
-							    psu_ok_show);
+					psu_attrs[j].suffix, psu_attrs[j].show);
 				if (ret)
 					return ret;
 				attr_ptrs[attr_idx] = &attrs[attr_idx].attr;
