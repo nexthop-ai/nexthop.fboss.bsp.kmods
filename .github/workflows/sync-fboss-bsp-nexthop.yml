@@ -42,7 +42,10 @@ jobs:
           fi
           git merge --no-ff --no-commit "$src" || true
           git checkout HEAD -- README.md
-          git rm -q -f --ignore-unmatch .github/workflows/sync-fboss-bsp-nexthop.yml
+          # Extract this workflow file's name
+          workflow_ref=${GITHUB_WORKFLOW_REF#"$GITHUB_REPOSITORY/"}
+          workflow_file=${workflow_ref%@*}
+          git rm -q -f --ignore-unmatch "$workflow_file"
           unmerged=$(git diff --name-only --diff-filter=U)
           if [ -n "$unmerged" ]; then
             echo "::error::Merge conflicts, sync by hand: $unmerged"
