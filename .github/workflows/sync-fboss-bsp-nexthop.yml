@@ -40,7 +40,9 @@ jobs:
             echo "fboss.bsp.nexthop already has $src"
             exit 0
           fi
-          git merge --no-ff --no-commit "$src" || true
+          if ! git merge --no-ff --no-commit "$src"; then
+            git rev-parse -q --verify MERGE_HEAD >/dev/null || { echo "::error::Merge of $src failed"; exit 1; }
+          fi
           git checkout HEAD -- README.md
           # Extract this workflow file's name
           workflow_ref=${GITHUB_WORKFLOW_REF#"$GITHUB_REPOSITORY/"}
