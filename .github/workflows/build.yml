@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install build tooling
-        run: dnf install -y dnf-plugins-core rpm-build findutils kmod
+        run: dnf install -y dnf-plugins-core rpm-build findutils kmod jq
 
       - name: Install build dependencies from the RPM spec
         run: dnf builddep -y --spec rpmbuild/nexthop_bsp_kmods.spec

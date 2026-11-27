@@ -10,10 +10,6 @@ set -e
 
 dnf builddep -y --spec rpmbuild/nexthop_bsp_kmods.spec
 
-pushd kmods
-make -j "$(nproc)"
-popd
-
 ./build_rpm.sh
 
 cd rpmbuild/RPMS/*

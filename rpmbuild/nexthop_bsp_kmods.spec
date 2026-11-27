@@ -1,26 +1,40 @@
-%define kmodsrc %{_sourcedir}/kmods
-%define kver %(ls -1 /lib/modules | sort -rV | head -n 1)
+%define debug_package %{nil}
+%define has_kver %{?rpm_kernel_version: 1} %{?!rpm_kernel_version: 0}
+%if !%{has_kver}
+%define rpm_kernel_version %(ls -1 /lib/modules 2>/dev/null | sort -rV | head -n 1 | grep . || uname -r)
+%endif
+%define kver %{rpm_kernel_version}
+%global dist %{nil}
 
 Version:        1.0.0
 Release:        1%{?dist}
-# Want: nexthop_bsp_kmods-6.11.1-1.fboss.el9.x86_64-1.0.0-1
-Name:           nexthop_bsp_kmods-%{kver}-%{version}-1
+# platform_manager looks up the binary subpackage by its full name, for example
+# nexthop_bsp_kmods-6.11.1-1.fboss.el9.x86_64-1.0.0-1.
+Name:           nexthop_bsp_kmods
 Summary:        Nexthop BSP Kernel Modules
 License:        GPLv2
 Group:          System Environment/Kernel
-BuildRequires:  kernel-devel, make, gcc, jq
-Requires:       kernel, jq
+Source0:        %{name}-%{version}.tar.gz
+BuildRequires:  kernel-devel, make, gcc
 
 %description
 Nexthop FBOSS BSP Kernel Modules package containing kernel drivers and utilities.
 
+%package -n %{name}-%{kver}
+Summary:        Nexthop BSP Kernel Modules
+Group:          System Environment/Kernel
+Requires:       kernel, jq
+Provides:       %{name}
+
+%description -n %{name}-%{kver}
+Nexthop FBOSS BSP Kernel Modules package containing kernel drivers and utilities.
+
 %prep
-# Build directly from the kmods/ source tree (%{kmodsrc}); nothing to stage.
-:
+%setup -q -n %{name}-%{version}
 
 %build
-cd %{kmodsrc}
-make
+make -C kmods clean KERNELDIR=/lib/modules/%{kver}/build
+make -C kmods KERNELDIR=/lib/modules/%{kver}/build
 
 %install
 # Create installation directories
@@ -28,25 +42,24 @@ mkdir -p %{buildroot}/usr/local/nexthop_bsp/%{kver}
 mkdir -p %{buildroot}/lib/modules/%{kver}/extra/nexthop
 
 # Install kernel modules
-cd %{kmodsrc}
-install -m 644 *.ko backports/*.ko %{buildroot}/lib/modules/%{kver}/extra/nexthop/
+install -m 644 kmods/*.ko kmods/backports/*.ko %{buildroot}/lib/modules/%{kver}/extra/nexthop/
 
 # Install configuration and scripts
-install -m 644 %{_sourcedir}/kmods/scripts/kmods.json %{buildroot}/usr/local/nexthop_bsp/%{kver}/
-install -m 755 %{_sourcedir}/kmods/scripts/fbsp-remove.sh %{buildroot}/usr/local/nexthop_bsp/%{kver}/
+install -m 644 kmods/scripts/kmods.json %{buildroot}/usr/local/nexthop_bsp/%{kver}/
+install -m 755 kmods/scripts/fbsp-remove.sh %{buildroot}/usr/local/nexthop_bsp/%{kver}/
 
 # Install the DDR5 SPD temp sensor helper, its unit and its udev rule. These are
 # kernel-version independent, so they live outside the %{kver} directory.
 mkdir -p %{buildroot}/usr/libexec/nexthop_bsp
 mkdir -p %{buildroot}/usr/lib/systemd/system
 mkdir -p %{buildroot}/usr/lib/udev/rules.d
-install -m 755 %{_sourcedir}/kmods/scripts/nh-spd-temp-symlinks.sh %{buildroot}/usr/libexec/nexthop_bsp/
-install -m 644 %{_sourcedir}/kmods/systemd/nexthop-bsp-spd-temp-symlinks.service %{buildroot}/usr/lib/systemd/system/
-install -m 644 %{_sourcedir}/kmods/udev/70-nexthop-spd-temp.rules %{buildroot}/usr/lib/udev/rules.d/
+install -m 755 kmods/scripts/nh-spd-temp-symlinks.sh %{buildroot}/usr/libexec/nexthop_bsp/
+install -m 644 kmods/systemd/nexthop-bsp-spd-temp-symlinks.service %{buildroot}/usr/lib/systemd/system/
+install -m 644 kmods/udev/70-nexthop-spd-temp.rules %{buildroot}/usr/lib/udev/rules.d/
 
-%post
+%post -n %{name}-%{kver}
 # Run depmod to update module dependencies
-/sbin/depmod -a
+/sbin/depmod -a %{kver}
 
 # Pick up the SPD temp sensor unit and rule without requiring a reboot
 if [ -x /usr/bin/systemctl ]; then
@@ -58,7 +71,7 @@ if [ -x /usr/bin/udevadm ]; then
     /usr/bin/udevadm control --reload-rules || :
 fi
 
-%preun
+%preun -n %{name}-%{kver}
 # Unload modules before uninstallation if they are loaded
 if [ $1 -eq 0 ]; then
     /usr/local/nexthop_bsp/%{kver}/fbsp-remove.sh
@@ -68,13 +81,13 @@ if [ $1 -eq 0 ] && [ -x /usr/bin/systemctl ]; then
     /usr/bin/systemctl disable --now nexthop-bsp-spd-temp-symlinks.service || :
 fi
 
-%postun
+%postun -n %{name}-%{kver}
 # Run depmod after uninstallation
 if [ $1 -eq 0 ]; then
-    /sbin/depmod -a
+    /sbin/depmod -a %{kver}
 fi
 
-%files
+%files -n %{name}-%{kver}
 %defattr(-,root,root,-)
 /usr/local/nexthop_bsp/%{kver}/
 /lib/modules/%{kver}/extra/nexthop/*.ko

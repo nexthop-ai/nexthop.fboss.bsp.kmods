@@ -16,6 +16,7 @@ modules.order
 rpmbuild/BUILD/
 rpmbuild/BUILDROOT/
 rpmbuild/RPMS/
+rpmbuild/SOURCES/
 rpmbuild/SRPMS/
 rpmbuild/SPECS/
 dist/

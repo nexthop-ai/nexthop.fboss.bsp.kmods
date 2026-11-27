@@ -50,10 +50,14 @@ jobs:
         id: filter
         with:
           list-files: shell
+          # kmods/fboss_headers/ holds copies of FBOSS's uapi headers, kept
+          # identical to FBOSS's, so they are not held to kernel style.
+          predicate-quantifier: some-with-excludes
           filters: |
             sources:
               - added|modified: 'kmods/**/*.c'
               - added|modified: 'kmods/**/*.h'
+              - '!kmods/fboss_headers/**'
 
       - name: Install clang-format
         if: steps.filter.outputs.sources == 'true'
